@@ -303,7 +303,6 @@ build_windows_amd64() {
 
     local bin="$OUTDIR/wikiloop.exe"
     CGO_ENABLED=1 GOOS=windows GOARCH=amd64 \
-        CC="x86_64-w64-mingw32-gcc" \
         CGO_LDFLAGS="-L${libpath}" \
         go build -tags fts5 \
         -ldflags "-s -w -X main.Version=${VERSION}" \

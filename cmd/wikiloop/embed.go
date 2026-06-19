@@ -1,4 +1,4 @@
-//go:build fts5 && !windows
+//go:build fts5
 
 package main
 
