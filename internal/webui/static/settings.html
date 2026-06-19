@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings — WikiLoop</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .form-row { display:grid; grid-template-columns:180px 1fr; gap:8px 16px; align-items:center; margin-bottom:12px; }
+        .form-row label { font-size:13px; color:#555; text-align:right; }
+        .form-row input { padding:6px 10px; border:1px solid #d0d7de; border-radius:6px; font-size:14px; width:100%; box-sizing:border-box; }
+        .form-row input:focus { outline:none; border-color:#0969da; box-shadow:0 0 0 2px #dbeafe; }
+        .form-section { margin-bottom:24px; }
+        .form-section h3 { font-size:14px; font-weight:600; color:#444; margin:0 0 12px; border-bottom:1px solid #eee; padding-bottom:6px; }
+        .save-btn { padding:8px 20px; background:#0969da; color:#fff; border:none; border-radius:6px; font-size:14px; cursor:pointer; }
+        .save-btn:hover { background:#0757ba; }
+        #save-msg { margin-left:12px; font-size:13px; }
+    </style>
+</head>
+<body>
+<nav>
+    <a class="brand" href="/">WikiLoop</a>
+    <a href="/">Home</a>
+    <a href="/files">Files</a>
+    <a href="/settings" class="active">Settings</a>
+</nav>
+<div class="container">
+    <div class="card">
+        <h2>Settings</h2>
+        <form id="settings-form">
+            <div class="form-section">
+                <h3>Distill (LLM)</h3>
+                <div class="form-row">
+                    <label for="distill-base-url">API Base URL</label>
+                    <input id="distill-base-url" type="text" placeholder="https://api.openai.com/v1">
+                </div>
+                <div class="form-row">
+                    <label for="distill-token">API Token</label>
+                    <input id="distill-token" type="password" placeholder="sk-...">
+                </div>
+                <div class="form-row">
+                    <label for="distill-model">Model</label>
+                    <input id="distill-model" type="text" placeholder="gpt-4o-mini">
+                </div>
+            </div>
+            <div class="form-section">
+                <h3>Embedding</h3>
+                <div class="form-row">
+                    <label for="embed-idle-timeout">Idle Unload Timeout</label>
+                    <input id="embed-idle-timeout" type="text" placeholder="5m  (e.g. 1m / 5m / 15m / never)">
+                </div>
+            </div>
+            <div style="display:flex;align-items:center">
+                <button type="submit" class="save-btn">Save</button>
+                <span id="save-msg"></span>
+            </div>
+        </form>
+        <p id="settings-error" class="error" style="display:none"></p>
+    </div>
+</div>
+
+<script>
+async function loadSettings() {
+    const errEl = document.getElementById('settings-error');
+    try {
+        const res = await fetch('/api/settings');
+        const data = await res.json();
+        if (data.error) { errEl.textContent = data.error; errEl.style.display = ''; return; }
+        document.getElementById('distill-base-url').value = data.distill?.base_url || '';
+        document.getElementById('distill-token').value = data.distill?.token || '';
+        document.getElementById('distill-model').value = data.distill?.model || '';
+        document.getElementById('embed-idle-timeout').value = data.embedding?.idle_timeout || '';
+    } catch(e) {
+        errEl.textContent = 'Failed to load settings'; errEl.style.display = '';
+    }
+}
+
+document.getElementById('settings-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msg = document.getElementById('save-msg');
+    msg.textContent = 'Saving...'; msg.style.color = '#555';
+    const payload = {
+        distill: {
+            base_url: document.getElementById('distill-base-url').value,
+            token: document.getElementById('distill-token').value,
+            model: document.getElementById('distill-model').value,
+        },
+        embedding: { idle_timeout: document.getElementById('embed-idle-timeout').value },
+    };
+    try {
+        const res = await fetch('/api/settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (data.ok) {
+            msg.textContent = '✓ Saved'; msg.style.color = '#1a7f37';
+        } else {
+            msg.textContent = 'Save failed: ' + (data.error || 'unknown error'); msg.style.color = '#cf222e';
+        }
+    } catch(e) {
+        msg.textContent = 'Save failed'; msg.style.color = '#cf222e';
+    }
+});
+
+loadSettings();
+</script>
+</body>
+</html>
