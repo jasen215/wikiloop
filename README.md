@@ -3,6 +3,12 @@
   <h1>WikiLoop</h1>
   <p>Agent-native LLM Wiki (Karpathy-style) RAG: distill raw docs → structured Markdown wiki → hybrid search via MCP</p>
   <p><a href="docs/readme/README.zh-CN.md">中文文档</a></p>
+  <p>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
+    <a href="https://github.com/jasen215/wikiloop/releases"><img src="https://img.shields.io/github/v/release/jasen215/wikiloop" alt="Release"></a>
+    <img src="https://img.shields.io/badge/go-1.25+-00ADD8.svg" alt="Go Version">
+    <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey" alt="Platform">
+  </p>
 </div>
 
 WikiLoop is a local-first LLM Wiki knowledge base for agents. It is designed to help agents and humans maintain sourced, reviewable, Markdown-based knowledge from local raw materials.
