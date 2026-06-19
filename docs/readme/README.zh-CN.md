@@ -3,6 +3,12 @@
   <h1>WikiLoop</h1>
   <p>面向 Agent 的本地优先 LLM Wiki 知识库</p>
   <p><a href="../../README.md">English</a></p>
+  <p>
+    <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
+    <a href="https://github.com/jasen215/wikiloop/releases"><img src="https://img.shields.io/github/v/release/jasen215/wikiloop" alt="Release"></a>
+    <img src="https://img.shields.io/badge/go-1.25+-00ADD8.svg" alt="Go Version">
+    <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-blue" alt="Platform">
+  </p>
 </div>
 
 WikiLoop 是一个面向 Agent 的 local-first LLM Wiki 知识库。它帮助 Agent 和人类基于本地原始资料，维护有来源、可 review、可版本化的 Markdown 知识层。
