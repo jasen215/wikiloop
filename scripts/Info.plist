@@ -5,7 +5,7 @@
     <key>CFBundleExecutable</key>
     <string>wikiloop</string>
     <key>CFBundleIdentifier</key>
-    <string>com.anthropic.wikiloop</string>
+    <string>com.pieteams.wikiloop</string>
     <key>CFBundleName</key>
     <string>WikiLoop</string>
     <key>CFBundleVersion</key>
