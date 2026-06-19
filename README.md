@@ -58,9 +58,22 @@ Download the latest release for your platform:
 **Linux:**
 ```bash
 tar -xzf wikiloop-<version>-linux-amd64.tar.gz -C /path/to/install/
-# Binary: /path/to/install/wikiloop
-# Models: /path/to/install/models/
+sudo ln -sf /path/to/install/wikiloop /usr/local/bin/wikiloop
 ```
+
+### Download Embedding Model
+
+Vector search requires the `bge-small-zh` ONNX model (53 MB), downloaded separately:
+
+**[⬇ Download bge-small-zh.tar.gz](https://github.com/jasen215/wikiloop/releases/tag/models-v1)**
+
+```bash
+# Extract to your KB's models directory
+tar -xzf bge-small-zh.tar.gz -C $WIKILOOP_KB/models/
+```
+
+After extraction: `$WIKILOOP_KB/models/bge-small-zh/model.onnx` should exist.
+FTS search works without the model; vector search requires it.
 
 ## Building from Source
 
@@ -86,7 +99,7 @@ Requires Go 1.25+ with CGO enabled.
 - Linux targets: `brew install FiloSottile/musl-cross/musl-cross`
 - macOS DMG: `brew install create-dmg` (optional, skipped if absent)
 
-Each tar.gz includes the binary and bundled embedding models. The DMG is a drag-to-install macOS app bundle with system tray support.
+Each tar.gz includes the binary only. The DMG is a drag-to-install macOS app bundle with system tray support. Embedding models are downloaded separately (see above).
 
 ## Repository Structure
 

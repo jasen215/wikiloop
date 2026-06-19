@@ -184,9 +184,9 @@ func preflightCheck(kbRoot string, cfg *config.Config) error {
 	if modelDir := embed.FindModelDir(filepath.Join(kbRoot, "models")); modelDir == "" {
 		warns = append(warns, fmt.Sprintf(
 			"Embedding model not found in %s/models/ — vector search disabled (FTS still works).\n"+
-				"      Download the model archive from GitHub releases and extract to:\n"+
-				"      %s/models/bge-small-zh/\n"+
-				"      Release page: https://github.com/jasen215/wikiloop/releases",
+				"      Download bge-small-zh.tar.gz and extract to %s/models/:\n"+
+				"      https://github.com/jasen215/wikiloop/releases/tag/models-v1\n"+
+				"      tar -xzf bge-small-zh.tar.gz -C $WIKILOOP_KB/models/",
 			kbRoot, kbRoot))
 	}
 
