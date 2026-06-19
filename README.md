@@ -60,6 +60,12 @@ Download the latest release for your platform:
 | Linux x86_64 | `wikiloop-<version>-linux-amd64.tar.gz` |
 | Linux ARM64 | `wikiloop-<version>-linux-arm64.tar.gz` |
 
+> **Windows** is not currently supported. The vector embedding pipeline depends on
+> [libtokenizers](https://github.com/daulet/tokenizers) (a Rust CGO library) which has no
+> Windows prebuilt. FTS keyword search works without it, but a Windows build would require
+> compiling libtokenizers from source. Support will be added once an official Windows release
+> is available upstream.
+
 **macOS:** Open the DMG and drag WikiLoop to Applications. The app runs as a menubar icon.
 
 **Linux:**
