@@ -9,6 +9,7 @@
 #   darwin-amd64   → WikiLoop.app + .dmg  (requires macOS Intel)
 #   linux-amd64    → tar.gz with binary only (models downloaded separately)
 #   linux-arm64    → tar.gz with binary only (models downloaded separately)
+#   windows-amd64  → zip with binary + onnxruntime.dll (FTS only; vector requires model)
 #   all            → all of the above (default)
 #
 # Examples:
@@ -285,15 +286,57 @@ build_linux() {
     echo "  ✓ $tarball ($(du -sh "$tarball" | cut -f1))"
 }
 
+# ── Windows zip ───────────────────────────────────────────────────────────────
+
+build_windows_amd64() {
+    echo "→ building windows-amd64 (zip) ..."
+
+    local lib_suffix="windows-amd64"
+    local libpath
+    libpath="$(pwd)/$LIBDIR/$lib_suffix"
+
+    if [ ! -f "$libpath/libtokenizers.a" ] && [ ! -f "$libpath/libtokenizers.lib" ]; then
+        echo "  ✗ libtokenizers not found in $libpath — skipping windows-amd64"
+        echo "    Build it with: cd /tmp/tokenizers && cargo build --release"
+        return
+    fi
+
+    local bin="$OUTDIR/wikiloop.exe"
+    CGO_ENABLED=1 GOOS=windows GOARCH=amd64 \
+        CC="x86_64-w64-mingw32-gcc" \
+        CGO_LDFLAGS="-L${libpath}" \
+        go build -tags fts5 \
+        -ldflags "-s -w -X main.Version=${VERSION}" \
+        -o "$bin" ./cmd/wikiloop/ 2>/dev/null
+
+    local staging="$OUTDIR/.pkg-windows-amd64"
+    local zipfile="$OUTDIR/wikiloop-${VERSION}-windows-amd64.zip"
+    mkdir -p "$staging"
+    cp "$bin" "$staging/wikiloop.exe"
+
+    # Bundle onnxruntime.dll if available
+    local ort_dll="$LIBDIR/ort-windows-amd64/onnxruntime.dll"
+    if [ -f "$ort_dll" ]; then
+        cp "$ort_dll" "$staging/onnxruntime.dll"
+        echo "  ✓ bundled onnxruntime.dll"
+    fi
+
+    cd "$OUTDIR/.pkg-windows-amd64" && zip -q "../wikiloop-${VERSION}-windows-amd64.zip" * && cd - >/dev/null
+    rm -r "$staging" "$bin"
+
+    echo "  ✓ $zipfile ($(du -sh "$zipfile" | cut -f1))"
+}
+
 # ── dispatch ──────────────────────────────────────────────────────────────────
 
 echo "Building wikiloop v${VERSION}"
 echo
 
-want "darwin-arm64" && build_darwin_arm64
-want "darwin-amd64" && build_darwin_amd64
-want "linux-amd64"  && build_linux amd64 x86_64-linux-musl-gcc  libtokenizers.linux-musl-amd64 linux-amd64
-want "linux-arm64"  && build_linux arm64 aarch64-linux-musl-gcc libtokenizers.linux-musl-arm64 linux-arm64
+want "darwin-arm64"  && build_darwin_arm64
+want "darwin-amd64"  && build_darwin_amd64
+want "linux-amd64"   && build_linux amd64 x86_64-linux-musl-gcc  libtokenizers.linux-musl-amd64 linux-amd64
+want "linux-arm64"   && build_linux arm64 aarch64-linux-musl-gcc libtokenizers.linux-musl-arm64 linux-arm64
+want "windows-amd64" && build_windows_amd64
 
 echo
 echo "Done. Artifacts in $OUTDIR/"

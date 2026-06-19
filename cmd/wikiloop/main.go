@@ -20,12 +20,9 @@ import (
 	"syscall"
 	"time"
 
-	ort "github.com/yalue/onnxruntime_go"
-
 	"github.com/jasen215/wikiloop/internal/config"
 	"github.com/jasen215/wikiloop/internal/convert"
 	"github.com/jasen215/wikiloop/internal/distill"
-	"github.com/jasen215/wikiloop/internal/embed"
 	"github.com/jasen215/wikiloop/internal/kb"
 	"github.com/jasen215/wikiloop/internal/kbinit"
 	"github.com/jasen215/wikiloop/internal/synthesize"
@@ -173,24 +170,10 @@ func preflightCheck(kbRoot string, cfg *config.Config) error {
 		}
 	}
 
-	// 2. ONNX runtime library — required for vector embedding.
-	if _, err := embed.FindOrtLib(cfg.Runtime.OrtLib, kbRoot); err != nil {
-		warns = append(warns, "ONNX runtime not found — vector search disabled (FTS still works).\n"+
-			"      Install with: brew install onnxruntime")
-	}
+	// 2 & 3. ONNX runtime + embedding model (platform-conditional).
+	warns = append(warns, preflightCheckEmbedWarns(kbRoot, cfg)...)
 
-	// 3. Embedding model files — required for vector embedding.
-	// Models are not bundled; users download them separately.
-	if modelDir := embed.FindModelDir(filepath.Join(kbRoot, "models")); modelDir == "" {
-		warns = append(warns, fmt.Sprintf(
-			"Embedding model not found in %s/models/ — vector search disabled (FTS still works).\n"+
-				"      Download bge-small-zh.tar.gz and extract to %s/models/:\n"+
-				"      https://github.com/jasen215/wikiloop/releases/tag/models-v1\n"+
-				"      tar -xzf bge-small-zh.tar.gz -C $WIKILOOP_KB/models/",
-			kbRoot, kbRoot))
-	}
-
-	// 3. Port availability — probe by dialing; a successful connection means
+	// 4. Port availability — probe by dialing; a successful connection means
 	// something is already listening. Read-only, does not claim the port.
 	// This is fatal: HTTP MCP + Web UI cannot start on a taken port, so the
 	// app would be useless. Abort instead of leaving a half-dead menubar.
@@ -264,20 +247,6 @@ code{background:#f0f0f2;padding:2px 6px;border-radius:4px;font-size:13px}
 	_ = exec.Command("open", tmp).Run()
 }
 
-// setupRuntimeDeps locates and configures the ONNX Runtime shared library.
-// Required for vector embedding (serve, embed). When verbose, the path is logged.
-func setupRuntimeDeps(cfg *config.Config, kbRoot string, verbose bool) error {
-	ortPath, err := embed.FindOrtLib(cfg.Runtime.OrtLib, kbRoot)
-	if err != nil {
-		return fmt.Errorf("onnxruntime: %w", err)
-	}
-	ort.SetSharedLibraryPath(ortPath)
-
-	if verbose {
-		log.Printf("onnxruntime: %s", ortPath)
-	}
-	return nil
-}
 
 func runServe(kbRoot string) error {
 	if err := ensureKBDirs(kbRoot); err != nil {
@@ -520,45 +489,6 @@ func reindexFn(kbRoot string) {
 	runEmbedStep(kbRoot, cfg)
 }
 
-// makeEmbedder creates the ONNX embedder if a model dir is found. Returns nil otherwise.
-func makeEmbedder(kbRoot string, cfg *config.Config) kb.Embedder {
-	modelDir := embed.FindModelDir(filepath.Join(kbRoot, "models"))
-	if modelDir == "" {
-		return nil
-	}
-	idleTimeout := cfg.Embedding.IdleTimeout
-	if idleTimeout == 0 {
-		idleTimeout = 5 * time.Minute
-	}
-	return embed.NewONNXEmbedder(modelDir, 384, idleTimeout)
-}
-
-// runEmbedStep embeds any un-embedded documents using the ONNX model.
-// Skips silently if no model directory is found.
-func runEmbedStep(kbRoot string, cfg *config.Config) {
-	embedder := makeEmbedder(kbRoot, cfg)
-	if embedder == nil {
-		return
-	}
-
-	db, err := kb.OpenDB(kbRoot)
-	if err != nil {
-		log.Printf("embed step: open db: %v", err)
-		return
-	}
-	defer db.Close()
-
-	modelName := embed.ModelName(embed.FindModelDir(filepath.Join(kbRoot, "models")))
-
-	written, skipped, err := kb.EmbedDocuments(db, kbRoot, embedder, modelName, false)
-	if err != nil {
-		log.Printf("embed step: %v", err)
-		return
-	}
-	if written > 0 {
-		log.Printf("embed step: %d embedded, %d skipped", written, skipped)
-	}
-}
 
 // ── status ─────────────────────────────────────────────────────────────────────
 
@@ -669,45 +599,7 @@ func runContext(kbRoot string, args []string) error {
 }
 
 // ── embed ──────────────────────────────────────────────────────────────────────
-
-func runEmbed(kbRoot string, args []string) error {
-	fs := flag.NewFlagSet("embed", flag.ContinueOnError)
-	full := fs.Bool("full", false, "drop and rebuild the vector store from scratch")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	cfg, err := config.Load(kbRoot)
-	if err != nil {
-		return fmt.Errorf("load config: %w", err)
-	}
-	if err := setupRuntimeDeps(cfg, kbRoot, false); err != nil {
-		return err
-	}
-
-	modelDir := embed.FindModelDir(filepath.Join(kbRoot, "models"))
-	if modelDir == "" {
-		return fmt.Errorf("model.onnx not found; place model files in <kbRoot>/models/ or next to the binary")
-	}
-
-	embedder := embed.NewONNXEmbedder(modelDir, 384, 10*time.Minute)
-
-	db, err := kb.OpenDB(kbRoot)
-	if err != nil {
-		return fmt.Errorf("open db: %w", err)
-	}
-	defer db.Close()
-
-	modelName := embed.ModelName(modelDir)
-
-	fmt.Printf("embedding with model=%s full=%v\n", modelName, *full)
-	written, skipped, err := kb.EmbedDocuments(db, kbRoot, embedder, modelName, *full)
-	if err != nil {
-		return fmt.Errorf("embed: %w", err)
-	}
-	fmt.Printf("embedded %d document(s), skipped %d unchanged\n", written, skipped)
-	return nil
-}
+// runEmbed is defined in embed_enabled.go (!windows) or embed_disabled.go (windows).
 
 // ── index ──────────────────────────────────────────────────────────────────────
 

@@ -55,8 +55,9 @@ WikiLoop wiki bundle 遵循 [OKF v0.1](https://github.com/GoogleCloudPlatform/kn
 | macOS Intel | `WikiLoop-<version>-darwin-amd64.dmg` |
 | Linux x86_64 | `wikiloop-<version>-linux-amd64.tar.gz` |
 | Linux ARM64 | `wikiloop-<version>-linux-arm64.tar.gz` |
+| Windows x86_64 | `wikiloop-<version>-windows-amd64.zip` |
 
-> **Windows 暂不支持。** 向量嵌入依赖 [libtokenizers](https://github.com/daulet/tokenizers)（Rust CGO 库），目前没有 Windows 预编译包。FTS 关键词搜索无需此依赖，但完整的向量搜索功能需要从源码编译 libtokenizers。待上游发布官方 Windows 包后会跟进支持。
+> **Windows 说明：** Windows 版完整支持 FTS 关键词搜索。向量搜索需要下载 embedding 模型，从 [models-v1](https://github.com/jasen215/wikiloop/releases/tag/models-v1) 下载并解压到 `<WIKILOOP_KB>/models/` 即可。`embed` 子命令在 Windows 上正常工作。
 
 **macOS：** 打开 DMG，将 WikiLoop 拖入 Applications。App 以 menubar 图标形式运行。
 

@@ -59,12 +59,12 @@ Download the latest release for your platform:
 | macOS Intel | `WikiLoop-<version>-darwin-amd64.dmg` |
 | Linux x86_64 | `wikiloop-<version>-linux-amd64.tar.gz` |
 | Linux ARM64 | `wikiloop-<version>-linux-arm64.tar.gz` |
+| Windows x86_64 | `wikiloop-<version>-windows-amd64.zip` |
 
-> **Windows** is not currently supported. The vector embedding pipeline depends on
-> [libtokenizers](https://github.com/daulet/tokenizers) (a Rust CGO library) which has no
-> Windows prebuilt. FTS keyword search works without it, but a Windows build would require
-> compiling libtokenizers from source. Support will be added once an official Windows release
-> is available upstream.
+> **Windows note:** The Windows build supports FTS keyword search fully. Vector search
+> requires the embedding model — download from
+> [models-v1](https://github.com/jasen215/wikiloop/releases/tag/models-v1) and extract
+> to `<WIKILOOP_KB>/models/`. The `embed` subcommand works on Windows.
 
 **macOS:** Open the DMG and drag WikiLoop to Applications. The app runs as a menubar icon.
 

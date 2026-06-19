@@ -70,8 +70,57 @@ jobs:
           path: |
             dist/WikiLoop-${{ steps.version.outputs.VERSION }}-darwin-amd64.dmg
 
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Build libtokenizers for Windows
+        shell: bash
+        run: |
+          git clone --depth=1 https://github.com/daulet/tokenizers /tmp/tokenizers
+          cd /tmp/tokenizers
+          cargo build --release
+          mkdir -p "$GITHUB_WORKSPACE/lib/windows-amd64"
+          cp target/release/tokenizers.lib "$GITHUB_WORKSPACE/lib/windows-amd64/libtokenizers.lib" 2>/dev/null || \
+          cp target/release/libtokenizers.a "$GITHUB_WORKSPACE/lib/windows-amd64/libtokenizers.a" 2>/dev/null || true
+
+      - name: Download ONNX Runtime for Windows
+        shell: bash
+        run: |
+          VERSION_ORT=1.26.0
+          curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION_ORT}/onnxruntime-win-x64-${VERSION_ORT}.zip" \
+            -o /tmp/ort.zip
+          unzip -q /tmp/ort.zip -d /tmp/ort
+          mkdir -p lib/ort-windows-amd64
+          cp /tmp/ort/onnxruntime-win-x64-${VERSION_ORT}/lib/onnxruntime.dll lib/ort-windows-amd64/
+
+      - name: Build windows-amd64
+        shell: bash
+        run: ./scripts/build.sh ${{ steps.version.outputs.VERSION }} windows-amd64
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-windows
+          path: |
+            dist/wikiloop-${{ steps.version.outputs.VERSION }}-windows-amd64.zip
+
   release:
-    needs: [build-arm64, build-amd64]
+    needs: [build-arm64, build-amd64, build-windows]
     runs-on: ubuntu-latest
     steps:
       - name: Extract version from tag
@@ -88,6 +137,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: dist-amd64
+          path: dist/
+
+      - name: Download windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-windows
           path: dist/
 
       - name: Create GitHub Release
@@ -111,6 +166,16 @@ jobs:
             sudo ln -sf $(pwd)/wikiloop /usr/local/bin/wikiloop
             ```
 
+            ### Windows (x86_64)
+            1. Download `wikiloop-${{ steps.version.outputs.VERSION }}-windows-amd64.zip`
+            2. Extract and place `wikiloop.exe` in your PATH
+            3. Place `onnxruntime.dll` alongside `wikiloop.exe`
+
+            > **Note:** The Windows build supports FTS keyword search. Vector search requires
+            > the embedding model — download `bge-small-zh.tar.gz` from the
+            > [models release](https://github.com/jasen215/wikiloop/releases/tag/models-v1)
+            > and extract to `<WIKILOOP_KB>/models/`.
+
             ## Embedding Model
             Download separately and place in `<WIKILOOP_KB>/models/bge-small-zh/`:
             - `model.onnx`
@@ -123,5 +188,6 @@ jobs:
             dist/WikiLoop-${{ steps.version.outputs.VERSION }}-darwin-amd64.dmg
             dist/wikiloop-${{ steps.version.outputs.VERSION }}-linux-amd64.tar.gz
             dist/wikiloop-${{ steps.version.outputs.VERSION }}-linux-arm64.tar.gz
+            dist/wikiloop-${{ steps.version.outputs.VERSION }}-windows-amd64.zip
           draft: false
           prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
