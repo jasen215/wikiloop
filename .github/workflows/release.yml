@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install build dependencies
+        run: |
+          brew install onnxruntime
+          brew install FiloSottile/musl-cross/musl-cross
+          brew install create-dmg
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Build all platforms
+        run: ./scripts/build.sh ${{ steps.version.outputs.VERSION }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: WikiLoop v${{ steps.version.outputs.VERSION }}
+          body: |
+            ## Installation
+
+            ### macOS (Apple Silicon)
+            1. Download `WikiLoop-${{ steps.version.outputs.VERSION }}-darwin-arm64.dmg`
+            2. Open the DMG and drag WikiLoop to Applications
+            3. Download the embedding model (see below) and place in `~/wikiloop-kb/models/bge-small-zh/`
+
+            ### Linux (x86_64 / ARM64)
+            ```bash
+            tar -xzf wikiloop-${{ steps.version.outputs.VERSION }}-linux-<arch>.tar.gz
+            sudo ln -sf $(pwd)/wikiloop /usr/local/bin/wikiloop
+            ```
+
+            ## Embedding Model
+            Download separately and place in `<WIKILOOP_KB>/models/bge-small-zh/`:
+            - `model.onnx`
+            - `tokenizer.json`
+            - `meta.json`
+
+            See [README](https://github.com/jasen215/wikiloop#quick-start) for full setup instructions.
+          files: |
+            dist/WikiLoop-${{ steps.version.outputs.VERSION }}-darwin-arm64.dmg
+            dist/wikiloop-${{ steps.version.outputs.VERSION }}-linux-amd64.tar.gz
+            dist/wikiloop-${{ steps.version.outputs.VERSION }}-linux-arm64.tar.gz
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
