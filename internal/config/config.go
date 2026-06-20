@@ -23,6 +23,9 @@ type SettingsRequest struct {
 	Embedding struct {
 		IdleTimeout *string `json:"idle_timeout"`
 	} `json:"embedding"`
+	UI struct {
+		Language *string `json:"language"`
+	} `json:"ui"`
 }
 
 type Config struct {

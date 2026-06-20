@@ -184,6 +184,9 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 			"embedding": map[string]interface{}{
 				"idle_timeout": cfg.Embedding.IdleTimeout.String(),
 			},
+			"ui": map[string]interface{}{
+				"language": cfg.UI.Language,
+			},
 		})
 
 	case http.MethodPut:
@@ -209,6 +212,11 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		if req.Embedding.IdleTimeout != nil {
 			if d, err := time.ParseDuration(*req.Embedding.IdleTimeout); err == nil {
 				cfg.Embedding.IdleTimeout = d
+			}
+		}
+		if req.UI.Language != nil {
+			if *req.UI.Language == "zh" || *req.UI.Language == "en" {
+				cfg.UI.Language = *req.UI.Language
 			}
 		}
 		if err := config.Save(s.kbRoot, cfg); err != nil {
