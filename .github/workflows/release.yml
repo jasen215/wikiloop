@@ -73,7 +73,7 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/lib/windows-amd64"
           echo "--- release files ---"
           ls target/x86_64-pc-windows-gnu/release/*.a target/x86_64-pc-windows-gnu/release/*.lib 2>/dev/null || true
-          cp target/x86_64-pc-windows-gnu/release/libtokenizers.a \
+          cp target/x86_64-pc-windows-gnu/release/libtokenizers_ffi.a \
              "$GITHUB_WORKSPACE/lib/windows-amd64/libtokenizers.a"
 
       - name: Download ONNX Runtime for Windows
