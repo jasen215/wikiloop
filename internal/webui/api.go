@@ -96,7 +96,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 // FileInfo describes a single file in the raw/ directory.
 type FileInfo struct {
 	Name    string `json:"name"`
-	Path    string `json:"path"`     // relative path from raw/ (e.g. "ebooks/Chip/xxx.md")
+	Path    string `json:"path"` // relative path from raw/ (e.g. "ebooks/Chip/xxx.md")
 	Size    int64  `json:"size"`
 	ModTime int64  `json:"mod_time"` // Unix timestamp
 }
@@ -162,6 +162,38 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]interface{}{"ok": true, "filename": filename})
 }
 
+// handleImportLark imports a Lark/Feishu Wiki URL and expands embedded Base
+// tables into searchable local text datasets.
+func (s *Server) handleImportLark(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		URL  string `json:"url"`
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, map[string]interface{}{"error": "invalid JSON: " + err.Error()})
+		return
+	}
+	if strings.TrimSpace(req.URL) == "" {
+		writeJSON(w, map[string]interface{}{"error": "Lark Wiki URL is required"})
+		return
+	}
+	result, err := s.importLark(r.Context(), s.kbRoot, req.URL, req.Name)
+	if err != nil {
+		writeJSON(w, map[string]interface{}{"error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]interface{}{
+		"ok":            true,
+		"document_path": result.DocumentPath,
+		"table_paths":   result.TablePaths,
+		"table_rows":    result.TableRows,
+	})
+}
+
 // handleSettings reads (GET) or writes (PUT) config.yaml.
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
@@ -177,9 +209,10 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 				"port": cfg.Server.Port,
 			},
 			"distill": map[string]interface{}{
-				"base_url": cfg.Distill.BaseURL,
-				"token":    cfg.Distill.Token,
-				"model":    cfg.Distill.Model,
+				"base_url":         cfg.Distill.BaseURL,
+				"model":            cfg.Distill.Model,
+				"api_type":         cfg.Distill.APIType,
+				"token_configured": cfg.Distill.Token != "",
 			},
 			"embedding": map[string]interface{}{
 				"idle_timeout": cfg.Embedding.IdleTimeout.String(),
@@ -208,6 +241,9 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Distill.Model != nil {
 			cfg.Distill.Model = *req.Distill.Model
+		}
+		if req.Distill.APIType != nil {
+			cfg.Distill.APIType = *req.Distill.APIType
 		}
 		if req.Embedding.IdleTimeout != nil {
 			if d, err := time.ParseDuration(*req.Embedding.IdleTimeout); err == nil {

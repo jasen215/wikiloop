@@ -3,7 +3,7 @@ type: source-note
 title: ""
 description: ""
 tags: []
-resource: ""
+resource: ""        # only a URL/citation explicitly present in the raw source
 sources:
   - raw/
 timestamp: ""  # ISO 8601, e.g. 2026-06-14T09:00:00Z
@@ -19,9 +19,9 @@ supports: []         # pages/claims this source supports
 
 - Path: `raw/`
 - Type:
-- Author:
-- Published:
-- Imported:
+- Author: Not provided in source.
+- Published: Not provided in source.
+- Imported:          # set by WikiLoop from the raw file modification date
 
 ## Summary
 

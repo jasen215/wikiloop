@@ -5,6 +5,7 @@ package watcher
 import (
 	"io/fs"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,6 +21,8 @@ type Debouncer struct {
 	duration time.Duration
 	callback func()
 	timer    *time.Timer
+	running  bool
+	pending  bool
 }
 
 // NewDebouncer creates a Debouncer that waits duration after the last Trigger
@@ -37,10 +40,38 @@ func (d *Debouncer) Trigger() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
+	if d.running {
+		d.pending = true
+		return
+	}
 	if d.timer != nil {
 		d.timer.Stop()
 	}
-	d.timer = time.AfterFunc(d.duration, d.callback)
+	d.timer = time.AfterFunc(d.duration, d.fire)
+}
+
+// fire serializes callback execution. Events arriving during a long callback
+// are coalesced into one follow-up run after the callback completes.
+func (d *Debouncer) fire() {
+	d.mu.Lock()
+	if d.running {
+		d.pending = true
+		d.mu.Unlock()
+		return
+	}
+	d.running = true
+	d.timer = nil
+	d.mu.Unlock()
+
+	d.callback()
+
+	d.mu.Lock()
+	d.running = false
+	if d.pending {
+		d.pending = false
+		d.timer = time.AfterFunc(d.duration, d.fire)
+	}
+	d.mu.Unlock()
 }
 
 // ReindexFunc is called by Run/Watch when file changes are detected.
@@ -58,6 +89,7 @@ func Watch(kbRoot string, reindexFn ReindexFunc) error {
 	defer w.Close()
 
 	rawDir := filepath.Join(kbRoot, "raw")
+	wikiDir := filepath.Join(kbRoot, "wiki")
 	indexDir := filepath.Join(kbRoot, "index")
 
 	// Watch raw/, wiki/, and schema/; ignore non-existent dirs silently.
@@ -82,7 +114,9 @@ func Watch(kbRoot string, reindexFn ReindexFunc) error {
 					_ = addDirRecursive(w, event.Name)
 				}
 				// Ignore index/ (generated artifacts) and raw/converted/.
-				if isUnderDir(event.Name, indexDir) || isConvertedPath(event.Name, rawDir) {
+				if isUnderDir(event.Name, indexDir) ||
+					isConvertedPath(event.Name, rawDir) ||
+					isGeneratedWikiPath(event.Name, wikiDir) {
 					continue
 				}
 				debouncer.Trigger()
@@ -114,6 +148,18 @@ func isConvertedPath(path, rawDir string) bool {
 	convertedDir := filepath.Join(rawDir, "converted")
 	rel, err := filepath.Rel(convertedDir, path)
 	return err == nil && !filepath.IsAbs(rel) && rel != ".." && len(rel) > 0 && rel[:2] != ".."
+}
+
+// isGeneratedWikiPath reports whether path is maintained by WikiLoop itself.
+// These writes are already indexed by the active pipeline and must not trigger
+// another watcher cycle.
+func isGeneratedWikiPath(path, wikiDir string) bool {
+	rel, err := filepath.Rel(wikiDir, path)
+	if err != nil || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false
+	}
+	base := filepath.Base(rel)
+	return base == "index.md" || rel == "log.md"
 }
 
 // addDirRecursive adds dir and every subdirectory beneath it to the watcher.

@@ -3,8 +3,11 @@
 package webui
 
 import (
+	"context"
 	"embed"
 	"net/http"
+
+	"github.com/jasen215/wikiloop/internal/larkimport"
 )
 
 //go:embed static/*
@@ -12,12 +15,18 @@ var staticFiles embed.FS
 
 // Server serves the Web UI and REST API.
 type Server struct {
-	kbRoot string
+	kbRoot     string
+	importLark func(context.Context, string, string, string) (*larkimport.Result, error)
 }
 
 // NewServer creates a Server for the given knowledge-base root directory.
 func NewServer(kbRoot string) *Server {
-	return &Server{kbRoot: kbRoot}
+	return &Server{
+		kbRoot: kbRoot,
+		importLark: func(ctx context.Context, kbRoot, url, name string) (*larkimport.Result, error) {
+			return larkimport.Import(ctx, kbRoot, url, name, nil)
+		},
+	}
 }
 
 // Handler returns an http.Handler with all routes registered.
@@ -58,6 +67,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/search", s.handleSearch)
 	mux.HandleFunc("/api/files", s.handleFiles)
 	mux.HandleFunc("/api/upload", s.handleUpload)
+	mux.HandleFunc("/api/import-lark", s.handleImportLark)
 	mux.HandleFunc("/api/settings", s.handleSettings)
 
 	return mux

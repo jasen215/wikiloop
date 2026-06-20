@@ -197,11 +197,41 @@ All commands accept a global `--kb <path>` flag (defaults to `$WIKILOOP_KB`, the
 | `wikiloop distill` | (runs inside `serve`/watcher) Convert new `raw/` files into `wiki/source-notes/` via LLM. Not a standalone subcommand — triggered automatically. |
 | `wikiloop synthesize [--topic X] [--full]` | Generate concept/comparison/decision pages from source-notes. Incremental by default; `--full` reprocesses all; `--topic` limits to tag/title matches. |
 | `wikiloop synthesize --gaps --topic X` | Knowledge-gap analysis for a topic; writes report to `index/gaps/<slug>.md`. |
+| `wikiloop import-lark <URL>` | Import a Lark/Feishu Wiki document and expand embedded Base tables into searchable local datasets. Requires authenticated `lark-cli`. |
 | `wikiloop lint` | Health-check wiki pages: missing frontmatter fields, broken source links. |
 | `wikiloop status` | Print index stats (document/embedding counts, index size). |
 | `wikiloop service <install\|uninstall\|start\|stop\|status\|logs>` | Manage the OS service (launchd / systemd). |
 
 **LLM config** (`config.yaml` under KB root, `distill` section) is required for `distill` and `synthesize`. See the MCP Server section for the format; `api_type` selects `openai` (default) or `anthropic`.
+
+DeepSeek uses the OpenAI-compatible API:
+
+```yaml
+distill:
+  base_url: "https://api.deepseek.com"
+  model: "deepseek-chat"
+  api_type: "openai"
+```
+
+Keep the token out of `config.yaml` when possible:
+
+```bash
+export WIKILOOP_DISTILL_TOKEN="your-api-key"
+```
+
+The settings page also has a **Use DeepSeek** preset. Base URLs with or without
+the trailing `/v1` are accepted.
+
+### Import a Lark/Feishu Wiki page
+
+```bash
+wikiloop import-lark "https://example.larkoffice.com/wiki/..."
+```
+
+Embedded Base tables are fetched page by page. The document is saved as
+Markdown under `raw/lark/`; full table rows are saved as sibling `.txt`
+datasets. These datasets are searchable and available to retrieval, but are
+not sent wholesale to the LLM distillation step.
 
 ### synthesize workflow: from raw sources to topic summaries
 
