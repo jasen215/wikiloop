@@ -21,18 +21,43 @@ const (
 	ActionQuit
 )
 
+type trayLabels struct {
+	OpenDashboard string
+	OpenKBDir     string
+	Settings      string
+	Quit          string
+}
+
+func labelsFor(lang string) trayLabels {
+	if lang == "zh" {
+		return trayLabels{
+			OpenDashboard: "打开控制台",
+			OpenKBDir:     "打开知识库目录",
+			Settings:      "设置",
+			Quit:          "退出",
+		}
+	}
+	return trayLabels{
+		OpenDashboard: "Open Dashboard",
+		OpenKBDir:     "Open KB Directory",
+		Settings:      "Settings",
+		Quit:          "Quit",
+	}
+}
+
 // Run starts the system tray icon and menu. Actions are sent to the action channel.
-func Run(kbRoot string, port int, actionCh chan<- Action) {
+func Run(kbRoot string, port int, lang string, actionCh chan<- Action) {
+	labels := labelsFor(lang)
 	systray.Run(func() {
 		systray.SetIcon(iconPNG)
 		systray.SetTooltip("WikiLoop Knowledge Base")
 
-		mOpenUI := systray.AddMenuItem("Open Dashboard", "Open Web UI in browser")
-		mOpenKB := systray.AddMenuItem("Open KB Directory", "Open knowledge base folder")
+		mOpenUI := systray.AddMenuItem(labels.OpenDashboard, "")
+		mOpenKB := systray.AddMenuItem(labels.OpenKBDir, "")
 		systray.AddSeparator()
-		mSettings := systray.AddMenuItem("Settings", "Open settings page")
+		mSettings := systray.AddMenuItem(labels.Settings, "")
 		systray.AddSeparator()
-		mQuit := systray.AddMenuItem("Quit", "Quit WikiLoop")
+		mQuit := systray.AddMenuItem(labels.Quit, "")
 
 		go func() {
 			for {

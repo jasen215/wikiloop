@@ -339,7 +339,7 @@ func runServe(kbRoot string) error {
 				}
 			}
 		}()
-		tray.Run(kbRoot, cfg.Server.Port, actionCh)
+		tray.Run(kbRoot, cfg.Server.Port, cfg.UI.Language, actionCh)
 	} else {
 		log.Printf("no display detected — running headless (Ctrl-C to stop)")
 		select {} // block forever; SIGTERM handler above handles shutdown
