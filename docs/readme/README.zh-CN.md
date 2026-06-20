@@ -52,7 +52,6 @@ WikiLoop wiki bundle 遵循 [OKF v0.1](https://github.com/GoogleCloudPlatform/kn
 | 平台 | 文件 |
 |---|---|
 | macOS Apple Silicon | `WikiLoop-<version>-darwin-arm64.dmg` |
-| macOS Intel | `WikiLoop-<version>-darwin-amd64.dmg` |
 | Linux x86_64 | `wikiloop-<version>-linux-amd64.tar.gz` |
 | Linux ARM64 | `wikiloop-<version>-linux-arm64.tar.gz` |
 | Windows x86_64 | `wikiloop-<version>-windows-amd64.zip` |
