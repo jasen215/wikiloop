@@ -12,32 +12,32 @@
 <body>
 <nav>
     <a class="brand" href="/">WikiLoop</a>
-    <a href="/">Home</a>
-    <a href="/files" class="active">Files</a>
-    <a href="/settings">Settings</a>
+    <a href="/" data-i18n="nav.home">Home</a>
+    <a href="/files" class="active" data-i18n="nav.files">Files</a>
+    <a href="/settings" data-i18n="nav.settings">Settings</a>
 </nav>
 <div class="container">
     <div class="card">
-        <h2>Upload Files</h2>
+        <h2 data-i18n="files.upload_title">Upload Files</h2>
         <div id="drop-zone" style="border:2px dashed #ccc;border-radius:8px;padding:32px;text-align:center;color:#888;cursor:pointer;margin-bottom:16px;transition:border-color .2s,background .2s">
             <div style="font-size:36px;margin-bottom:8px">📂</div>
-            <div>Drop files here, or <label for="file-input" style="color:#0969da;cursor:pointer;text-decoration:underline">browse</label></div>
+            <div data-i18n="files.drop_hint">Drop files here, or <label for="file-input" style="color:#0969da;cursor:pointer;text-decoration:underline">browse</label></div>
             <input id="file-input" type="file" multiple style="display:none">
         </div>
         <div id="upload-status" style="margin-bottom:12px;font-size:13px"></div>
     </div>
     <div class="card">
-        <h2>Raw Files <span id="files-count" style="font-weight:400;color:#888;font-size:13px"></span></h2>
+        <h2><span data-i18n="files.raw_title">Raw Files</span> <span id="files-count" style="font-weight:400;color:#888;font-size:13px"></span></h2>
         <table class="files-table" id="files-table">
             <thead>
                 <tr>
-                    <th>Path</th>
-                    <th style="width:90px">Size</th>
-                    <th style="width:170px">Modified</th>
+                    <th data-i18n="files.col_path">Path</th>
+                    <th data-i18n="files.col_size" style="width:90px">Size</th>
+                    <th data-i18n="files.col_modified" style="width:170px">Modified</th>
                 </tr>
             </thead>
             <tbody id="files-body">
-                <tr><td colspan="3" class="empty">Loading...</td></tr>
+                <tr><td colspan="3" class="empty" data-i18n="files.loading">Loading...</td></tr>
             </tbody>
         </table>
         <div id="files-pagination" class="pagination" style="display:none">
@@ -48,6 +48,51 @@
         <p id="files-error" class="error" style="display:none"></p>
     </div>
 </div>
+
+<script>
+const I18N = {
+  en: {
+    "nav.home":           "Home",
+    "nav.files":          "Files",
+    "nav.settings":       "Settings",
+    "files.upload_title": "Upload Files",
+    "files.drop_hint":    "Drop files here, or",
+    "files.raw_title":    "Raw Files",
+    "files.col_path":     "Path",
+    "files.col_size":     "Size",
+    "files.col_modified": "Modified",
+    "files.loading":      "Loading...",
+    "files.no_files":     "No files",
+    "files.uploading":    "Uploading",
+    "files.uploaded":     "file(s) uploaded",
+    "files.failed":       "failed",
+    "error.load_files":   "Failed to load file list",
+  },
+  zh: {
+    "nav.home":           "首页",
+    "nav.files":          "文件",
+    "nav.settings":       "设置",
+    "files.upload_title": "上传文件",
+    "files.drop_hint":    "拖放文件到这里，或",
+    "files.raw_title":    "原始文件",
+    "files.col_path":     "路径",
+    "files.col_size":     "大小",
+    "files.col_modified": "修改时间",
+    "files.loading":      "加载中…",
+    "files.no_files":     "暂无文件",
+    "files.uploading":    "上传中",
+    "files.uploaded":     "个文件已上传",
+    "files.failed":       "个失败",
+    "error.load_files":   "无法加载文件列表",
+  }
+};
+
+let _lang = "zh";
+
+function t(key) {
+  return (I18N[_lang] || I18N["zh"])[key] || (I18N["en"][key] || key);
+}
+</script>
 
 <script>
 const PAGE_SIZE = 15;
@@ -113,12 +158,12 @@ async function loadFiles() {
         allFiles = data.files || [];
         document.getElementById('files-count').textContent = `(${allFiles.length} files)`;
         if (allFiles.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="3" class="empty">No files</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="3" class="empty">' + t('files.no_files') + '</td></tr>';
             return;
         }
         renderPage();
     } catch(e) {
-        errEl.textContent = 'Failed to load file list';
+        errEl.textContent = t('error.load_files');
         errEl.style.display = '';
         tbody.innerHTML = '';
     }
@@ -148,7 +193,7 @@ fileInput.addEventListener('change', () => {
 async function uploadFiles(files) {
     if (files.length === 0) return;
     let ok = 0, fail = 0;
-    uploadStatus.textContent = `Uploading (0/${files.length})...`;
+    uploadStatus.textContent = `${t('files.uploading')} (0/${files.length})...`;
     for (let i = 0; i < files.length; i++) {
         const fd = new FormData();
         fd.append('file', files[i]);
@@ -157,13 +202,40 @@ async function uploadFiles(files) {
             const data = await res.json();
             data.ok ? ok++ : fail++;
         } catch { fail++; }
-        uploadStatus.textContent = `Uploading (${i+1}/${files.length})...`;
+        uploadStatus.textContent = `${t('files.uploading')} (${i+1}/${files.length})...`;
     }
     uploadStatus.innerHTML = ok > 0
-        ? `<span style="color:#1a7f37">✓ ${ok} file(s) uploaded</span>` + (fail > 0 ? `, <span style="color:#cf222e">${fail} failed</span>` : '')
-        : `<span style="color:#cf222e">${fail} file(s) failed</span>`;
+        ? `<span style="color:#1a7f37">✓ ${ok} ${t('files.uploaded')}</span>` + (fail > 0 ? `, <span style="color:#cf222e">${fail} ${t('files.failed')}</span>` : '')
+        : `<span style="color:#cf222e">${fail} ${t('files.failed')}</span>`;
     loadFiles();
 }
+</script>
+
+<script>
+async function applyI18n() {
+  try {
+    const res = await fetch("/api/settings");
+    const cfg = await res.json();
+    _lang = cfg?.ui?.language || "zh";
+  } catch (_) {}
+  const dict = I18N[_lang] || I18N["zh"];
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    const key = el.getAttribute("data-i18n");
+    if (!dict[key]) return;
+    if (el.children.length > 0) {
+      for (const node of el.childNodes) {
+        if (node.nodeType === Node.TEXT_NODE) {
+          node.textContent = dict[key];
+          break;
+        }
+      }
+    } else {
+      el.textContent = dict[key];
+    }
+  });
+}
+
+document.addEventListener("DOMContentLoaded", applyI18n);
 </script>
 </body>
 </html>
