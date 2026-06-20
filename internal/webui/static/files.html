@@ -169,8 +169,6 @@ async function loadFiles() {
     }
 }
 
-loadFiles();
-
 // ── Upload ────────────────────────────────────────────────────────────────
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
@@ -233,6 +231,7 @@ async function applyI18n() {
       el.textContent = dict[key];
     }
   });
+  loadFiles();
 }
 
 document.addEventListener("DOMContentLoaded", applyI18n);
