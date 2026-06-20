@@ -49,7 +49,7 @@ func labelsFor(lang string) trayLabels {
 func Run(kbRoot string, port int, lang string, actionCh chan<- Action) {
 	labels := labelsFor(lang)
 	systray.Run(func() {
-		systray.SetIcon(iconPNG)
+		systray.SetTemplateIcon(iconPNG, iconPNG)
 		systray.SetTooltip("WikiLoop Knowledge Base")
 
 		mOpenUI := systray.AddMenuItem(labels.OpenDashboard, "")

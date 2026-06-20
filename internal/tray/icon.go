@@ -4,5 +4,5 @@ package tray
 
 import _ "embed"
 
-//go:embed app_icon.png
+//go:embed icon_template.png
 var iconPNG []byte
