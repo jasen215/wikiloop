@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -16,23 +18,8 @@ import (
 func Generate(cfg Config, kbRoot string, plans []PagePlan) (int, error) {
 	written := 0
 	for _, p := range plans {
-		dest := filepath.Join(kbRoot, "wiki", p.Type+"s", p.Slug+".md")
-
-		// Skip if already exists.
-		if _, err := os.Stat(dest); err == nil {
-			continue
-		}
-
-		content, err := generatePage(cfg, kbRoot, p)
-		if err != nil {
-			return written, fmt.Errorf("generate %s/%s: %w", p.Type, p.Slug, err)
-		}
-
-		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-			return written, err
-		}
-		if err := os.WriteFile(dest, []byte(content), 0o644); err != nil {
-			return written, err
+		if err := AppendOrCreate(cfg, kbRoot, p); err != nil {
+			return written, fmt.Errorf("append-or-create %s/%s: %w", p.Type, p.Slug, err)
 		}
 		written++
 	}
@@ -175,4 +162,227 @@ func collectExistingTitles(kbRoot string) []string {
 		}
 	}
 	return titles
+}
+
+// extractSourceCount reads the source_count field from YAML frontmatter.
+// Returns 0 if absent or unparseable.
+func extractSourceCount(data []byte) int {
+	re := regexp.MustCompile(`(?m)^source_count:\s*(\d+)`)
+	m := re.FindSubmatch(data)
+	if m == nil {
+		return 0
+	}
+	n, _ := strconv.Atoi(string(m[1]))
+	return n
+}
+
+// incrementSourceCount updates source_count in YAML frontmatter by delta.
+// If source_count is absent, inserts it after the opening "---" line.
+func incrementSourceCount(data []byte, delta int) []byte {
+	re := regexp.MustCompile(`(?m)^source_count:\s*\d+`)
+	current := extractSourceCount(data)
+	newVal := fmt.Sprintf("source_count: %d", current+delta)
+	if re.Match(data) {
+		return re.ReplaceAll(data, []byte(newVal))
+	}
+	// Insert after opening "---\n"
+	return []byte(strings.Replace(string(data), "---\n", "---\n"+newVal+"\n", 1))
+}
+
+// appendToPage reads an existing wiki page and asks the LLM to append
+// new information from p.Sources. Preserves existing structure.
+func appendToPage(cfg Config, kbRoot, destPath string, p PagePlan) error {
+	existing, err := os.ReadFile(destPath)
+	if err != nil {
+		return err
+	}
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "You have an existing wiki %s page. Append new information from the source notes below.\n", p.Type)
+	fmt.Fprintf(&sb, "IMPORTANT: preserve the existing page structure. Only ADD new facts, observations, or comparisons at the end of relevant sections. Do not rewrite existing content.\n\n")
+	fmt.Fprintf(&sb, "=== EXISTING PAGE ===\n%s\n\n", string(existing))
+	fmt.Fprintf(&sb, "=== NEW SOURCE NOTES TO INCORPORATE ===\n\n")
+
+	for _, src := range p.Sources {
+		srcPath := filepath.Join(kbRoot, filepath.FromSlash(src))
+		data, err := os.ReadFile(srcPath)
+		if err != nil {
+			continue
+		}
+		fmt.Fprintf(&sb, "=== %s ===\n%s\n\n", src, string(data))
+	}
+	fmt.Fprintf(&sb, "Output the complete updated page (frontmatter + all sections). Do NOT wrap in code fences.\n")
+
+	system := buildGeneratePrompt(kbRoot, p.Type)
+	updated, err := callLLM(cfg, system, sb.String())
+	if err != nil {
+		return err
+	}
+
+	// Update source_count in the result.
+	updated = string(incrementSourceCount([]byte(updated), len(p.Sources)))
+
+	return os.WriteFile(destPath, []byte(updated), 0o644)
+}
+
+// rewritePage reorganises an existing wiki page when enough sources have accumulated.
+// It passes the existing page content (which already contains distilled summaries
+// of all previous sources) plus the new source notes to the LLM, asking it to
+// restructure the page for clarity and completeness. No need to re-read original
+// raw articles — the existing page is the accumulated knowledge base.
+func rewritePage(cfg Config, kbRoot, destPath string, p PagePlan) error {
+	existing, err := os.ReadFile(destPath)
+	if err != nil {
+		return err
+	}
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "You have an existing wiki %s page that has grown with multiple appended sections and needs reorganisation.\n", p.Type)
+	fmt.Fprintf(&sb, "The existing page already contains distilled knowledge from previous source notes.\n\n")
+	fmt.Fprintf(&sb, "Your task: REORGANISE the page into a coherent, well-structured document.\n")
+	fmt.Fprintf(&sb, "- Merge overlapping or redundant sections\n")
+	fmt.Fprintf(&sb, "- Improve flow and logical structure\n")
+	fmt.Fprintf(&sb, "- Incorporate the new source notes below\n")
+	fmt.Fprintf(&sb, "- Preserve ALL factual content — do not discard knowledge\n\n")
+	fmt.Fprintf(&sb, "=== EXISTING PAGE (accumulated knowledge) ===\n%s\n\n", string(existing))
+
+	if len(p.Sources) > 0 {
+		fmt.Fprintf(&sb, "=== NEW SOURCE NOTES TO INCORPORATE ===\n\n")
+		for _, src := range p.Sources {
+			srcPath := filepath.Join(kbRoot, filepath.FromSlash(src))
+			data, err := os.ReadFile(srcPath)
+			if err != nil {
+				continue
+			}
+			fmt.Fprintf(&sb, "=== %s ===\n%s\n\n", src, string(data))
+		}
+	}
+	fmt.Fprintf(&sb, "Output the complete reorganised page (frontmatter + all sections). Do NOT wrap in code fences.\n")
+
+	system := buildGeneratePrompt(kbRoot, p.Type)
+	updated, err := callLLM(cfg, system, sb.String())
+	if err != nil {
+		return err
+	}
+
+	updated = string(incrementSourceCount([]byte(updated), len(p.Sources)))
+	return os.WriteFile(destPath, []byte(updated), 0o644)
+}
+
+// AppendOrCreate either appends new source-note content to an existing wiki page
+// (matched by slug) or creates a new one. Silently skips if cfg is not configured.
+func AppendOrCreate(cfg Config, kbRoot string, p PagePlan) error {
+	if !cfg.IsConfigured() {
+		return nil
+	}
+	dest := filepath.Join(kbRoot, "wiki", p.Type+"s", p.Slug+".md")
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return err
+	}
+
+	if _, err := os.Stat(dest); err == nil {
+		// Page exists — check if rewrite is needed (source_count >= 5).
+		existing, readErr := os.ReadFile(dest)
+		if readErr == nil && extractSourceCount(existing)+len(p.Sources) >= 5 {
+			// Rewrite: reorganise using existing page content + new sources.
+			// No need to re-read original raw articles — the existing page
+			// already contains distilled summaries of previous sources.
+			return rewritePage(cfg, kbRoot, dest, p)
+		}
+		// Append mode.
+		return appendToPage(cfg, kbRoot, dest, p)
+	}
+
+	// New page.
+	return generateAndWrite(cfg, kbRoot, dest, p)
+}
+
+// generateAndWrite generates a page from scratch and writes it to dest.
+func generateAndWrite(cfg Config, kbRoot, dest string, p PagePlan) error {
+	content, err := generatePage(cfg, kbRoot, p)
+	if err != nil {
+		return err
+	}
+	// Set initial source_count.
+	content = string(incrementSourceCount([]byte(content), len(p.Sources)))
+	return os.WriteFile(dest, []byte(content), 0o644)
+}
+
+// RunIncremental triggers synthesize for a single newly-distilled source-note.
+// It loads the note, finds related source-notes (same tags), and calls
+// AppendOrCreate for each proposed page. Silently skips if cfg not configured.
+func RunIncremental(cfg Config, kbRoot, notePath string) error {
+	if !cfg.IsConfigured() {
+		return nil
+	}
+	allNotes, err := LoadSourceNotes(kbRoot)
+	if err != nil {
+		return err
+	}
+	return runIncrementalWithNotes(cfg, kbRoot, notePath, allNotes)
+}
+
+// RunIncrementalWithNotes is like RunIncremental but accepts a pre-loaded
+// allNotes slice, avoiding repeated disk scans when processing many notes.
+func RunIncrementalWithNotes(cfg Config, kbRoot, notePath string, allNotes []SourceNote) error {
+	if !cfg.IsConfigured() {
+		return nil
+	}
+	return runIncrementalWithNotes(cfg, kbRoot, notePath, allNotes)
+}
+
+func runIncrementalWithNotes(cfg Config, kbRoot, notePath string, allNotes []SourceNote) error {
+	if len(allNotes) == 0 {
+		return nil
+	}
+
+	// Find the new note in the loaded list.
+	var newNote *SourceNote
+	for i, n := range allNotes {
+		if filepath.ToSlash(n.Path) == filepath.ToSlash(notePath) {
+			newNote = &allNotes[i]
+			break
+		}
+	}
+	if newNote == nil {
+		// Note not indexed yet, skip.
+		return nil
+	}
+
+	// Find related notes sharing at least one tag with the new note.
+	tagSet := make(map[string]bool)
+	for _, t := range newNote.Tags {
+		tagSet[strings.ToLower(t)] = true
+	}
+	var related []SourceNote
+	related = append(related, *newNote)
+	for _, n := range allNotes {
+		if n.Path == newNote.Path {
+			continue
+		}
+		for _, t := range n.Tags {
+			if tagSet[strings.ToLower(t)] {
+				related = append(related, n)
+				break
+			}
+		}
+		if len(related) >= 10 { // cap to avoid huge LLM prompts
+			break
+		}
+	}
+
+	existing := collectExistingTitles(kbRoot)
+	plans, err := Plan(cfg, related, existing, "")
+	if err != nil {
+		return err
+	}
+	plans = filterViablePlans(plans)
+
+	for _, p := range plans {
+		if err := AppendOrCreate(cfg, kbRoot, p); err != nil {
+			// Log but don't abort — incremental synthesize is best-effort.
+			fmt.Printf("synthesize incremental: %s/%s: %v\n", p.Type, p.Slug, err)
+		}
+	}
+	return nil
 }

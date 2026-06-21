@@ -44,7 +44,17 @@ HOW TO USE:
 
 DO NOT use WikiLoop for questions answerable from the current code, file structure,
 or git history — read those directly instead. WikiLoop is read-only knowledge; it
-does not reflect uncommitted local edits.`
+does not reflect uncommitted local edits.
+
+CITATION RULES (mandatory):
+  - When answering from kb_context or kb_search results, ALWAYS cite the source
+    paths in your answer. Use the path field from wiki_pages and raw_sources.
+    Example: "According to [wiki/concepts/rag-optimization.md], ..."
+  - If the retrieved context does not contain enough information to answer,
+    say so explicitly: "The knowledge base does not contain sufficient information
+    on this topic." Do NOT generate answers beyond what the context supports.
+  - If a conflict is reported in the results, acknowledge it: cite both sides
+    and note that the sources disagree.`
 
 // Start creates an MCP HTTP server, registers KB tools, and listens on addr.
 // apiKey is reserved for future auth middleware; currently unused.
@@ -99,6 +109,7 @@ func registerTools(s *mcpserver.MCPServer, kbRoot string, embedder kb.Embedder) 
 		mcp.WithDescription("Search the WikiLoop knowledge base (hybrid FTS + vector) and return ranked results."),
 		mcp.WithString("query", mcp.Required(), mcp.Description("Search query")),
 		mcp.WithString("layer", mcp.Description("Filter layer: wiki, raw, or schema")),
+		mcp.WithString("kind", mcp.Description("Filter page kind: source-note, concept, comparison, decision")),
 		mcp.WithNumber("limit", mcp.Description("Maximum results (default 10)")),
 		mcp.WithBoolean("no_vec", mcp.Description("Disable vector search (default false)")),
 	)
@@ -111,8 +122,12 @@ func registerTools(s *mcpserver.MCPServer, kbRoot string, embedder kb.Embedder) 
 		if l := req.GetString("layer", ""); l != "" {
 			layer = &l
 		}
+		var kind *string
+		if k := req.GetString("kind", ""); k != "" {
+			kind = &k
+		}
 
-		data := handleKBSearch(kbRoot, query, layer, limit, noVec, embedder)
+		data := handleKBSearch(kbRoot, query, layer, kind, limit, noVec, embedder)
 		return toolResultJSON(data)
 	})
 
@@ -120,12 +135,12 @@ func registerTools(s *mcpserver.MCPServer, kbRoot string, embedder kb.Embedder) 
 	contextTool := mcp.NewTool("kb_context",
 		mcp.WithDescription("Build a ready-to-use context bundle for a question: wiki pages, raw sources, graph neighbors, conflicts."),
 		mcp.WithString("question", mcp.Required(), mcp.Description("Question to build context for")),
-		mcp.WithNumber("limit", mcp.Description("Maximum wiki pages (default 5)")),
+		mcp.WithNumber("limit", mcp.Description("Maximum wiki pages (default 10)")),
 		mcp.WithBoolean("no_vec", mcp.Description("Disable vector search (default false)")),
 	)
 	s.AddTool(contextTool, func(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		question := req.GetString("question", "")
-		limit := req.GetInt("limit", 5)
+		limit := req.GetInt("limit", 10)
 		noVec := req.GetBool("no_vec", false)
 
 		data := handleKBContext(kbRoot, question, limit, noVec, embedder)

@@ -53,14 +53,17 @@ Begin your response directly with the YAML frontmatter (---).`
 
 // buildSystemPrompt returns the system prompt for source-note distillation.
 // If schema/templates/source-note.md exists in kbRoot, its content is used
-// as the template section; otherwise the built-in default is returned.
+// as the output template. Additionally, any reference files found in
+// schema/references/ (page-types.md, citation-rules.md) are appended as
+// quality constraints. Falls back to the built-in default if no template exists.
 func buildSystemPrompt(kbRoot string) string {
 	templatePath := filepath.Join(kbRoot, "schema", "templates", "source-note.md")
 	data, err := os.ReadFile(templatePath)
 	if err != nil {
 		return defaultSystemPrompt
 	}
-	return `You are a knowledge-base curator. Given a raw source document, generate a structured wiki source-note page.
+
+	prompt := `You are a knowledge-base curator. Given a raw source document, generate a structured wiki source-note page.
 
 Output MUST be valid Markdown with YAML frontmatter. Do NOT wrap your output in code blocks or backticks.
 
@@ -71,4 +74,16 @@ Use the following template as the exact structure for your output:
 ` + string(data) + `
 
 Begin your response directly with the YAML frontmatter (---).`
+
+	// Append reference files as quality constraints if they exist.
+	for _, ref := range []string{"page-types.md", "citation-rules.md"} {
+		refPath := filepath.Join(kbRoot, "schema", "references", ref)
+		refData, err := os.ReadFile(refPath)
+		if err != nil {
+			continue
+		}
+		prompt += "\n\n---\n# Knowledge Base Rules: " + ref + "\n\n" + string(refData)
+	}
+
+	return prompt
 }

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/jasen215/wikiloop/internal/kb"
+	"github.com/jasen215/wikiloop/internal/synthesize"
 )
 
 // Config holds the LLM API configuration.
@@ -382,6 +383,19 @@ func DistillFile(config Config, rawPath, kbRoot string, embedder kb.Embedder) er
 	stem := strings.TrimSuffix(filepath.Base(rel), filepath.Ext(rel))
 	if err := appendLog(kbRoot, titleFromNote(generated, stem)); err != nil {
 		return fmt.Errorf("append log: %w", err)
+	}
+
+	// Trigger incremental synthesize for the newly created source-note.
+	// Best-effort: errors are logged but not returned to the caller.
+	synthCfg := synthesize.Config{
+		BaseURL: config.BaseURL,
+		Token:   config.Token,
+		Model:   config.Model,
+		APIType: config.APIType,
+	}
+	noteRelPath := "wiki/source-notes/" + filepath.ToSlash(noteRel)
+	if err := synthesize.RunIncremental(synthCfg, kbRoot, noteRelPath); err != nil {
+		fmt.Printf("distill: incremental synthesize: %v\n", err)
 	}
 	return nil
 }

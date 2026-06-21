@@ -51,14 +51,32 @@ func TestSynthState_SaveLoad(t *testing.T) {
 
 func TestFilterViablePlans(t *testing.T) {
 	plans := []PagePlan{
-		{Type: "concept", Sources: []string{"a", "b"}},      // < 3 → filtered
-		{Type: "concept", Sources: []string{"a", "b", "c"}}, // = 3 → keep
-		{Type: "comparison", Sources: []string{"a", "b"}},   // ≥ 2 → keep
-		{Type: "decision", Sources: []string{"a"}},           // < 2 → filtered
-		{Type: "decision", Sources: []string{"a", "b"}},      // ≥ 2 → keep
+		{Type: "concept", Sources: []string{"a", "b"}},      // 2 sources → keep
+		{Type: "concept", Sources: []string{"a", "b", "c"}}, // 3 sources → keep
+		{Type: "comparison", Sources: []string{"a", "b"}},   // 2 sources → keep
+		{Type: "decision", Sources: []string{"a"}},           // 1 source  → keep
+		{Type: "decision", Sources: []string{"a", "b"}},      // 2 sources → keep
 	}
 	result := filterViablePlans(plans)
-	if len(result) != 3 {
-		t.Errorf("expected 3 viable plans, got %d", len(result))
+	if len(result) != 5 {
+		t.Errorf("expected 5 viable plans (all have ≥1 source), got %d", len(result))
+	}
+}
+
+func TestFilterViablePlans_SingleSourceAllowed(t *testing.T) {
+	plans := []PagePlan{
+		{Type: "concept", Title: "A", Sources: []string{"s1"}},
+		{Type: "comparison", Title: "B", Sources: []string{"s1"}},
+		{Type: "decision", Title: "C", Sources: []string{"s1"}},
+		{Type: "concept", Title: "D", Sources: []string{}}, // empty — must be filtered
+	}
+	got := filterViablePlans(plans)
+	if len(got) != 3 {
+		t.Errorf("want 3 plans (single-source allowed), got %d", len(got))
+	}
+	for _, p := range got {
+		if len(p.Sources) == 0 {
+			t.Errorf("empty-source plan %q should be filtered", p.Title)
+		}
 	}
 }

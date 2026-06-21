@@ -607,6 +607,7 @@ func runSynthesize(kbRoot string, args []string) error {
 	var topic string
 	var full bool
 	var gaps bool
+	var incrementalAll bool
 	for i, a := range args {
 		switch {
 		case a == "--topic" && i+1 < len(args):
@@ -617,6 +618,8 @@ func runSynthesize(kbRoot string, args []string) error {
 			full = true
 		case a == "--gaps":
 			gaps = true
+		case a == "--incremental-all":
+			incrementalAll = true
 		}
 	}
 
@@ -633,6 +636,36 @@ func runSynthesize(kbRoot string, args []string) error {
 
 	if gaps {
 		return runSynthesizeGaps(kbRoot, synCfg, topic)
+	}
+
+	// --incremental-all: process each source-note individually via RunIncremental.
+	// This avoids the context-window limit of bulk Plan() and ensures every
+	// note triggers its own tag-based search + AppendOrCreate cycle.
+	if incrementalAll {
+		// Pre-load all notes once to avoid repeated disk scans (O(N²) → O(N)).
+		allNotes, err := synthesize.LoadSourceNotes(kbRoot)
+		if err != nil {
+			return fmt.Errorf("load source notes: %w", err)
+		}
+		total := len(allNotes)
+		fmt.Printf("synthesize --incremental-all: processing %d source-notes\n", total)
+		for i, note := range allNotes {
+			fmt.Printf("[%d/%d] %s\n", i+1, total, note.Title)
+			if err := synthesize.RunIncrementalWithNotes(synCfg, kbRoot, note.Path, allNotes); err != nil {
+				if strings.Contains(err.Error(), "429") {
+					fmt.Printf("  rate limited, waiting 30s...\n")
+					time.Sleep(30 * time.Second)
+					if err2 := synthesize.RunIncrementalWithNotes(synCfg, kbRoot, note.Path, allNotes); err2 != nil {
+						fmt.Printf("  warning: %v\n", err2)
+					}
+				} else {
+					fmt.Printf("  warning: %v\n", err)
+				}
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+		fmt.Println("synthesize --incremental-all: done")
+		return nil
 	}
 
 	if topic != "" {

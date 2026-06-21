@@ -4,8 +4,10 @@ package kb
 
 import (
 	"database/sql"
+	"math"
 	"regexp"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -33,12 +35,18 @@ const minTrigramLen = 3
 // FTSSearch performs a full-text search over the documents table.
 // query supports comma-separated keywords: "Go, Python" → per-keyword search.
 // layer optionally filters results to a specific layer (raw/wiki/schema).
+// kind optionally filters by page kind (source-note, concept, comparison, decision).
 // Returns nil (not error) for empty queries.
 //
 // FTS5 trigram tokenizer requires tokens ≥ 3 chars. Keywords shorter than
 // minTrigramLen fall back to SQL LIKE matching on title and content.
 // Results are deduplicated by ID before being returned.
 func FTSSearch(db *sql.DB, query string, layer *string, limit int) ([]SearchResult, error) {
+	return FTSSearchFiltered(db, query, layer, nil, limit)
+}
+
+// FTSSearchFiltered is like FTSSearch but also accepts an optional kind filter.
+func FTSSearchFiltered(db *sql.DB, query string, layer, kind *string, limit int) ([]SearchResult, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return nil, nil
@@ -62,10 +70,29 @@ func FTSSearch(db *sql.DB, query string, layer *string, limit int) ([]SearchResu
 	seen := make(map[string]bool)
 	var results []SearchResult
 
-	// FTS5 query for long keywords.
+	// FTS5 two-phase strategy: AND first (precision), OR fallback (recall).
 	if len(ftsKws) > 0 {
-		ftsQuery := buildFTSQuery(ftsKws)
-		res, err := ftsQuery_(db, ftsQuery, layer, effectiveLimit)
+		// Phase 1: AND query — all keywords must appear in the document.
+		// This eliminates cross-context false positives (e.g. "recall" in
+		// Agent memory articles when searching for RAG recall rate).
+		if len(ftsKws) >= 2 {
+			andQuery := buildFTSAndQuery(ftsKws)
+			res, err := ftsQuery_(db, andQuery, layer, kind, effectiveLimit)
+			if err != nil {
+				return nil, err
+			}
+			for _, r := range res {
+				if !seen[r.ID] {
+					seen[r.ID] = true
+					results = append(results, r)
+				}
+			}
+		}
+
+		// Phase 2: OR query — any keyword matches (fallback for coverage).
+		// Only adds documents not already found by AND query.
+		orQuery := buildFTSQuery(ftsKws)
+		res, err := ftsQuery_(db, orQuery, layer, kind, effectiveLimit)
 		if err != nil {
 			return nil, err
 		}
@@ -79,7 +106,7 @@ func FTSSearch(db *sql.DB, query string, layer *string, limit int) ([]SearchResu
 
 	// LIKE fallback for short keywords (e.g., "Go", "C").
 	for _, kw := range likeKws {
-		res, err := likeSearch(db, kw, layer, effectiveLimit)
+		res, err := likeSearch(db, kw, layer, kind, effectiveLimit)
 		if err != nil {
 			return nil, err
 		}
@@ -92,6 +119,7 @@ func FTSSearch(db *sql.DB, query string, layer *string, limit int) ([]SearchResu
 	}
 
 	// Sort: wiki first, then by fts_rank (lower is better in FTS5).
+	// AND-matched documents naturally rank higher (matched more keywords).
 	sortResults(results)
 
 	if len(results) > limit {
@@ -102,7 +130,7 @@ func FTSSearch(db *sql.DB, query string, layer *string, limit int) ([]SearchResu
 }
 
 // ftsQuery_ executes a FTS5 MATCH query and returns SearchResult rows.
-func ftsQuery_(db *sql.DB, ftsQuery string, layer *string, limit int) ([]SearchResult, error) {
+func ftsQuery_(db *sql.DB, ftsQuery string, layer, kind *string, limit int) ([]SearchResult, error) {
 	var args []interface{}
 	args = append(args, ftsQuery)
 
@@ -110,6 +138,11 @@ func ftsQuery_(db *sql.DB, ftsQuery string, layer *string, limit int) ([]SearchR
 	if layer != nil {
 		layerFilter = "AND d.layer = ?"
 		args = append(args, *layer)
+	}
+	kindFilter := ""
+	if kind != nil {
+		kindFilter = "AND d.kind = ?"
+		args = append(args, *kind)
 	}
 	args = append(args, limit)
 
@@ -127,7 +160,7 @@ SELECT
 FROM document_fts
 JOIN documents d ON d.id = document_fts.id
 WHERE document_fts MATCH ?
-` + layerFilter + `
+` + layerFilter + kindFilter + `
 ORDER BY wiki_priority DESC, rank
 LIMIT ?`
 
@@ -135,7 +168,7 @@ LIMIT ?`
 }
 
 // likeSearch performs LIKE-based fallback search for short keywords (< 3 chars).
-func likeSearch(db *sql.DB, kw string, layer *string, limit int) ([]SearchResult, error) {
+func likeSearch(db *sql.DB, kw string, layer, kind *string, limit int) ([]SearchResult, error) {
 	pattern := "%" + kw + "%"
 	var args []interface{}
 	args = append(args, pattern, pattern)
@@ -144,6 +177,11 @@ func likeSearch(db *sql.DB, kw string, layer *string, limit int) ([]SearchResult
 	if layer != nil {
 		layerFilter = "AND layer = ?"
 		args = append(args, *layer)
+	}
+	kindFilter := ""
+	if kind != nil {
+		kindFilter = "AND kind = ?"
+		args = append(args, *kind)
 	}
 	args = append(args, limit)
 
@@ -160,7 +198,7 @@ SELECT
     0.0 AS fts_rank
 FROM documents
 WHERE (title LIKE ? OR content LIKE ?)
-` + layerFilter + `
+` + layerFilter + kindFilter + `
 ORDER BY wiki_priority DESC
 LIMIT ?`
 
@@ -235,6 +273,18 @@ func buildFTSQuery(keywords []string) string {
 	return strings.Join(quoted, " OR ")
 }
 
+// buildFTSAndQuery converts keywords into a FTS5 AND expression.
+// All keywords must appear in the document.
+// Example: ["RAG", "召回率"] → `"RAG" AND "召回率"`
+func buildFTSAndQuery(keywords []string) string {
+	quoted := make([]string, len(keywords))
+	for i, kw := range keywords {
+		kw = strings.ReplaceAll(kw, `"`, `""`)
+		quoted[i] = `"` + kw + `"`
+	}
+	return strings.Join(quoted, " AND ")
+}
+
 // rrfK is the constant in Reciprocal Rank Fusion: score = 1/(k + rank).
 // k=60 is the standard value from the original RRF paper (Cormack et al., 2009).
 // Higher k reduces the impact of top-rank differences; lower k amplifies them.
@@ -251,7 +301,7 @@ const rrfK = 60.0
 //
 // boostMap maps doc ID → graph boost value (may be nil).
 // Results are returned sorted by hybrid score descending.
-func HybridRank(ftsResults, vecResults []SearchResult, boostMap map[string]float64) []SearchResult {
+func HybridRank(ftsResults, vecResults []SearchResult, boostMap map[string]float64, recencyMap map[string]int64) []SearchResult {
 	type entry struct {
 		r        SearchResult
 		ftsRank  int // 1-based rank in FTS results (0 = not present)
@@ -286,6 +336,11 @@ func HybridRank(ftsResults, vecResults []SearchResult, boostMap map[string]float
 		// Additive boosts (small relative to RRF scores to preserve rank order).
 		if r.Layer == "wiki" {
 			rrfScore += 1.0 / (rrfK + 1) * 0.5 // half a top-1 wiki contribution
+			if recencyMap != nil {
+				if ts, ok := recencyMap[r.ID]; ok {
+					rrfScore += recencyBoost(ts)
+				}
+			}
 		}
 		if boostMap != nil {
 			rrfScore += boostMap[r.ID] * 0.01
@@ -317,11 +372,141 @@ func abs64(v float64) float64 {
 	return v
 }
 
+// cosineSim returns the cosine similarity between two vectors.
+// Returns 0 if either vector has zero magnitude.
+func cosineSim(a, b []float32) float64 {
+	if len(a) != len(b) {
+		return 0
+	}
+	var dot, magA, magB float64
+	for i := range a {
+		dot += float64(a[i]) * float64(b[i])
+		magA += float64(a[i]) * float64(a[i])
+		magB += float64(b[i]) * float64(b[i])
+	}
+	if magA == 0 || magB == 0 {
+		return 0
+	}
+	return dot / (math.Sqrt(magA) * math.Sqrt(magB))
+}
+
+// biEncoderRerank re-scores results using the embedder.
+// Each result is scored by cosine similarity between the query embedding
+// and the embedding of "title description". Results are sorted descending
+// and truncated to limit. Falls back to original order if embedder is nil
+// or encoding fails.
+func biEncoderRerank(query string, results []SearchResult, embedder Embedder, limit int) []SearchResult {
+	if embedder == nil || len(results) == 0 {
+		if limit < len(results) {
+			return results[:limit]
+		}
+		return results
+	}
+
+	queryVec, err := embedder.Encode(query)
+	if err != nil {
+		if limit < len(results) {
+			return results[:limit]
+		}
+		return results
+	}
+
+	type scored struct {
+		r     SearchResult
+		score float64
+	}
+	scored_ := make([]scored, 0, len(results))
+	for _, r := range results {
+		text := r.Title
+		if r.Description != "" {
+			text += " " + r.Description
+		}
+		vec, err := embedder.Encode(text)
+		if err != nil {
+			scored_ = append(scored_, scored{r, 0})
+			continue
+		}
+		scored_ = append(scored_, scored{r, cosineSim(queryVec, vec)})
+	}
+
+	// Insertion sort descending by score.
+	for i := 1; i < len(scored_); i++ {
+		for j := i; j > 0 && scored_[j].score > scored_[j-1].score; j-- {
+			scored_[j], scored_[j-1] = scored_[j-1], scored_[j]
+		}
+	}
+
+	out := make([]SearchResult, 0, limit)
+	for i, s := range scored_ {
+		if i >= limit {
+			break
+		}
+		out = append(out, s.r)
+	}
+	return out
+}
+
+// recencyBoost returns a small additive score for recently-updated wiki documents.
+// Documents updated within 30 days receive up to half a top-1 RRF contribution,
+// decaying linearly to zero at 30 days. Raw/schema docs are not boosted.
+func recencyBoost(updatedAt int64) float64 {
+	const maxAgeDays = 30.0
+	ageDays := float64(time.Now().Unix()-updatedAt) / 86400.0
+	if ageDays < 0 {
+		ageDays = 0
+	}
+	if ageDays >= maxAgeDays {
+		return 0
+	}
+	// Linear decay: 1.0 at age=0, 0.0 at age=maxAgeDays
+	decay := 1.0 - ageDays/maxAgeDays
+	// Max boost = half a top-1 RRF contribution * 0.1 (small relative to relevance)
+	return (1.0 / (rrfK + 1)) * 0.5 * 0.1 * decay
+}
+
+// fetchRecencyMap queries updated_at for a set of doc IDs.
+func fetchRecencyMap(db *sql.DB, ids []string) map[string]int64 {
+	if len(ids) == 0 {
+		return nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	rows, err := db.Query(
+		"SELECT id, updated_at FROM documents WHERE id IN ("+strings.Join(placeholders, ",")+")",
+		args...,
+	)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	m := make(map[string]int64, len(ids))
+	for rows.Next() {
+		var id string
+		var ts int64
+		if rows.Scan(&id, &ts) == nil {
+			m[id] = ts
+		}
+	}
+	return m
+}
+
 // Search runs FTS + optional vector hybrid search with graph expansion.
 // If embedder != nil and a vec store exists, also runs VecSearch and merges via HybridRank.
 // Always performs GraphExpand and ConflictLinks on the result set.
 func Search(db *sql.DB, kbRoot string, query string, layer *string, limit int, embedder Embedder) ([]SearchResult, []GraphNeighbor, []Conflict, error) {
-	ftsResults, err := FTSSearch(db, query, layer, limit)
+	return SearchFiltered(db, kbRoot, query, layer, nil, limit, embedder)
+}
+
+// SearchFiltered is like Search but also accepts an optional kind filter.
+func SearchFiltered(db *sql.DB, kbRoot string, query string, layer, kind *string, limit int, embedder Embedder) ([]SearchResult, []GraphNeighbor, []Conflict, error) {
+	// Over-fetch for rerank: retrieve 4x candidates
+	fetchLimit := limit * 4
+
+	ftsResults, err := FTSSearchFiltered(db, query, layer, kind, fetchLimit)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -331,11 +516,12 @@ func Search(db *sql.DB, kbRoot string, query string, layer *string, limit int, e
 	if embedder != nil && VecStoreExists(kbRoot) {
 		queryVec, encErr := embedder.Encode(query)
 		if encErr == nil {
-			vecResults, _ := VecSearch(kbRoot, queryVec, layer, limit)
+			vecResults, _ := VecSearch(kbRoot, queryVec, layer, fetchLimit)
 			// Collect graph boost for merged result set.
 			allIDs := collectIDs(ftsResults, vecResults)
 			boostMap := GraphBoost(db, allIDs)
-			results = HybridRank(ftsResults, vecResults, boostMap)
+			recencyMap := fetchRecencyMap(db, allIDs)
+			results = HybridRank(ftsResults, vecResults, boostMap, recencyMap)
 		} else {
 			// Encoding failed; fall back to FTS only.
 			results = applyGraphBoost(db, ftsResults)
@@ -344,11 +530,10 @@ func Search(db *sql.DB, kbRoot string, query string, layer *string, limit int, e
 		results = applyGraphBoost(db, ftsResults)
 	}
 
-	if len(results) > limit {
-		results = results[:limit]
-	}
+	// Bi-encoder rerank: re-score candidates and truncate to limit.
+	results = biEncoderRerank(query, results, embedder, limit)
 
-	// Graph expansion and conflict detection on result set.
+	// Graph expansion and conflict detection on final result set.
 	ids := make([]string, len(results))
 	for i, r := range results {
 		ids[i] = r.ID

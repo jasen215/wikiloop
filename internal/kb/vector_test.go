@@ -3,6 +3,7 @@
 package kb
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -12,7 +13,7 @@ func TestHybridRank_FTSOnly(t *testing.T) {
 		{ID: "a", Layer: "wiki", Title: "A", FTSRank: -1.0},
 		{ID: "b", Layer: "raw", Title: "B", FTSRank: -2.0},
 	}
-	results := HybridRank(fts, nil, nil)
+	results := HybridRank(fts, nil, nil, nil)
 	if len(results) != 2 {
 		t.Fatalf("got %d results, want 2", len(results))
 	}
@@ -43,7 +44,7 @@ func TestHybridRank_MergesFTSAndVec(t *testing.T) {
 		{ID: "b", Layer: "raw", Title: "B", VecScore: 0.9},
 		{ID: "c", Layer: "raw", Title: "C", VecScore: 0.7},
 	}
-	results := HybridRank(fts, vec, nil)
+	results := HybridRank(fts, vec, nil, nil)
 	if len(results) != 3 {
 		t.Fatalf("got %d results, want 3 (a, b, c)", len(results))
 	}
@@ -82,7 +83,7 @@ func TestHybridRank_WikiBoost(t *testing.T) {
 		{ID: "wiki-doc", Layer: "wiki", Title: "W", FTSRank: -1.0},
 		{ID: "raw-doc", Layer: "raw", Title: "R", FTSRank: -1.0},
 	}
-	results := HybridRank(fts, nil, nil)
+	results := HybridRank(fts, nil, nil, nil)
 	var wScore, rScore float64
 	for _, r := range results {
 		if r.ID == "wiki-doc" {
@@ -125,4 +126,91 @@ func TestSearch_EmptyQuery(t *testing.T) {
 	}
 	_ = neighbors
 	_ = conflicts
+}
+
+func TestBiEncoderRerank_ReordersResults(t *testing.T) {
+	// Stub embedder: "query" → [1,0], "match" → [1,0], "nomatch" → [0,1]
+	embedder := &stubEmbedder{
+		vecs: map[string][]float32{
+			"query":   {1, 0},
+			"match":   {1, 0},
+			"nomatch": {0, 1},
+		},
+	}
+	results := []SearchResult{
+		{ID: "a", Title: "nomatch", Description: ""},
+		{ID: "b", Title: "match", Description: ""},
+	}
+	got := biEncoderRerank("query", results, embedder, 2)
+	if len(got) != 2 {
+		t.Fatalf("want 2 results, got %d", len(got))
+	}
+	if got[0].ID != "b" {
+		t.Errorf("want 'b' first (high cosine sim), got %q", got[0].ID)
+	}
+}
+
+func TestBiEncoderRerank_NilEmbedderFallback(t *testing.T) {
+	results := []SearchResult{
+		{ID: "a", Title: "foo"},
+		{ID: "b", Title: "bar"},
+	}
+	got := biEncoderRerank("query", results, nil, 2)
+	if got[0].ID != "a" || got[1].ID != "b" {
+		t.Error("nil embedder should return original order")
+	}
+}
+
+func TestBiEncoderRerank_LimitTruncates(t *testing.T) {
+	embedder := &stubEmbedder{
+		vecs: map[string][]float32{
+			"query": {1, 0},
+			"a":     {1, 0},
+			"b":     {1, 0},
+			"c":     {1, 0},
+		},
+	}
+	results := []SearchResult{
+		{ID: "1", Title: "a"},
+		{ID: "2", Title: "b"},
+		{ID: "3", Title: "c"},
+	}
+	got := biEncoderRerank("query", results, embedder, 2)
+	if len(got) != 2 {
+		t.Errorf("want 2 results after limit, got %d", len(got))
+	}
+}
+
+// stubEmbedder returns fixed vectors keyed by exact text match.
+type stubEmbedder struct {
+	vecs map[string][]float32
+}
+
+func (s *stubEmbedder) Encode(text string) ([]float32, error) {
+	if v, ok := s.vecs[text]; ok {
+		return v, nil
+	}
+	return []float32{0, 0}, nil
+}
+
+func (s *stubEmbedder) Dimension() int { return 2 }
+
+func TestChunkDoc_ShortDocNotChunked(t *testing.T) {
+	// Short doc (< 1000 runes) should return single chunk regardless of headings
+	content := "## Section A\nsome text\n## Section B\nmore text"
+	// content is well under 1000 runes
+	chunks := chunkDoc("Title", content)
+	if len(chunks) != 1 {
+		t.Errorf("short doc should produce 1 chunk, got %d", len(chunks))
+	}
+}
+
+func TestChunkDoc_LongDocChunked(t *testing.T) {
+	// Long doc (>= 1000 runes) should be split on ## headings
+	body := strings.Repeat("这是一段较长的内容用于测试分块逻辑。", 40) // ~1000+ runes
+	content := "## Section A\n" + body + "\n## Section B\n" + body
+	chunks := chunkDoc("Title", content)
+	if len(chunks) < 2 {
+		t.Errorf("long doc with multiple headings should produce >= 2 chunks, got %d", len(chunks))
+	}
 }

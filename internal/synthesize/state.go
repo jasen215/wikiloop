@@ -86,21 +86,14 @@ func hashNote(n SourceNote) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-// filterViablePlans removes plans that don't meet minimum source thresholds:
-//   - concept: requires ≥3 source-notes
-//   - comparison, decision: require ≥2 source-notes
+// filterViablePlans removes plans with no source notes.
+// A single source-note is sufficient to trigger page generation —
+// the LLM will create an initial draft that grows as more notes are added.
 func filterViablePlans(plans []PagePlan) []PagePlan {
 	var out []PagePlan
 	for _, p := range plans {
-		switch p.Type {
-		case "concept":
-			if len(p.Sources) >= 3 {
-				out = append(out, p)
-			}
-		case "comparison", "decision":
-			if len(p.Sources) >= 2 {
-				out = append(out, p)
-			}
+		if len(p.Sources) >= 1 {
+			out = append(out, p)
 		}
 	}
 	return out

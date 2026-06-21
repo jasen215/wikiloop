@@ -1,0 +1,337 @@
+#!/usr/bin/env python3
+"""
+WikiLoop vs Naive RAG 评估脚本
+使用 RAGAS 框架对比四个指标：
+  - Faithfulness（忠实度）
+  - Answer Relevancy（答案相关性）
+  - Context Precision（上下文精度）
+  - Context Recall（上下文召回）
+
+用法：
+  cd <project_root>
+  python3 eval/eval_wikiloop.py
+"""
+import os, sys, json, re, yaml, requests, glob, random, time
+from pathlib import Path
+
+# ── 读取配置 ──────────────────────────────────────────────────────────────────
+KB_ROOT = Path.home() / ".hermes/wikiloop-kb"
+with open(KB_ROOT / "config.yaml") as f:
+    cfg = yaml.safe_load(f)
+
+LLM_BASE_URL = cfg["distill"]["base_url"].rstrip("/")
+LLM_TOKEN    = cfg["distill"]["token"]
+LLM_MODEL    = cfg["distill"]["model"]
+MCP_URL      = f"http://127.0.0.1:{cfg['server']['port']}"
+MCP_API_KEY  = cfg["server"].get("api_key", "")
+
+print(f"LLM: {LLM_MODEL} @ {LLM_BASE_URL}")
+print(f"MCP: {MCP_URL}")
+
+# ── LLM 调用（Anthropic 兼容） ────────────────────────────────────────────────
+def call_llm(system: str, user: str) -> str:
+    resp = requests.post(
+        f"{LLM_BASE_URL}/v1/messages",
+        headers={
+            "x-api-key": LLM_TOKEN,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": LLM_MODEL,
+            "max_tokens": 4096,
+            "system": system,
+            "messages": [{"role": "user", "content": user}],
+        },
+        timeout=60,
+    )
+    if resp.status_code == 429:
+        time.sleep(10)
+        resp = requests.post(
+            f"{LLM_BASE_URL}/v1/messages",
+            headers={
+                "x-api-key": LLM_TOKEN,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": LLM_MODEL,
+                "max_tokens": 4096,
+                "system": system,
+                "messages": [{"role": "user", "content": user}],
+            },
+            timeout=60,
+        )
+    resp.raise_for_status()
+    data = resp.json()
+    # 兼容 Anthropic 和 OpenAI 格式
+    if "content" in data and isinstance(data["content"], list):
+        # thinking 模型先返回 thinking block，再返回 text block
+        for block in data["content"]:
+            if isinstance(block, dict) and block.get("type") == "text":
+                return block["text"].strip()
+    if "choices" in data:
+        return data["choices"][0]["message"]["content"].strip()
+    raise ValueError(f"Unexpected LLM response: {json.dumps(data)[:200]}")
+
+# ── WikiLoop kb_context ───────────────────────────────────────────────────────
+_mcp_session_id = None
+
+def mcp_call(method: str, params: dict) -> dict:
+    """调用 MCP 工具（HTTP streamable transport，维持 session）"""
+    global _mcp_session_id
+    headers = {"Content-Type": "application/json"}
+    if MCP_API_KEY:
+        headers["x-api-key"] = MCP_API_KEY
+
+    # initialize session（每次脚本运行只做一次）
+    if _mcp_session_id is None:
+        r0 = requests.post(f"{MCP_URL}/mcp", headers=headers,
+            json={"jsonrpc":"2.0","id":0,"method":"initialize",
+                  "params":{"protocolVersion":"2024-11-05","capabilities":{},
+                            "clientInfo":{"name":"eval","version":"1"}}},
+            timeout=10)
+        _mcp_session_id = r0.headers.get("Mcp-Session-Id", "")
+
+    if _mcp_session_id:
+        headers["Mcp-Session-Id"] = _mcp_session_id
+
+    resp = requests.post(f"{MCP_URL}/mcp", headers=headers,
+        json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
+        timeout=30)
+    return resp.json().get("result", {})
+
+def wikiloop_context(question: str) -> list[str]:
+    """调用 WikiLoop MCP kb_context 工具，返回 context 片段列表"""
+    try:
+        result = mcp_call("tools/call", {
+            "name": "kb_context",
+            "arguments": {"question": question, "limit": 5}
+        })
+        content_text = ""
+        for item in result.get("content", []):
+            if item.get("type") == "text":
+                content_text += item["text"]
+        contexts = []
+        try:
+            parsed = json.loads(content_text)
+            for page in parsed.get("wiki_pages", []):
+                ctx = f"[{page.get('title','')}] {page.get('description','')}"
+                if page.get("snippet"):
+                    ctx += f"\n{page['snippet']}"
+                contexts.append(ctx)
+            for src in parsed.get("raw_sources", []) or []:
+                ctx = f"[raw] {src.get('title','')} {src.get('description','')}"
+                contexts.append(ctx)
+        except Exception:
+            if content_text:
+                contexts = [content_text[:2000]]
+        return contexts if contexts else ["(no context)"]
+    except Exception as e:
+        print(f"  MCP error: {e}")
+        return ["(no context)"]
+
+# ── Naive RAG：直接从 raw 文件关键词匹配 ──────────────────────────────────────
+def naive_rag_context(question: str, top_k: int = 5) -> list[str]:
+    """简单 BM25-like：从 raw/*.md 文件里找包含问题关键词的段落"""
+    keywords = [w.lower() for w in re.split(r'\W+', question) if len(w) > 2]
+    raw_files = list((KB_ROOT / "raw").rglob("*.md"))
+    random.shuffle(raw_files)
+
+    scored = []
+    for fpath in raw_files[:200]:  # 限制扫描数量
+        try:
+            text = fpath.read_text(encoding="utf-8", errors="ignore")
+            # 去掉 frontmatter
+            text = re.sub(r'^---.*?---\s*', '', text, flags=re.DOTALL)
+            score = sum(text.lower().count(kw) for kw in keywords)
+            if score > 0:
+                # 取前 500 字符作为 context chunk
+                scored.append((score, text[:500]))
+        except Exception:
+            continue
+
+    scored.sort(reverse=True)
+    return [chunk for _, chunk in scored[:top_k]] if scored else ["(no context)"]
+
+# ── 自动生成测试问题集 ─────────────────────────────────────────────────────────
+def generate_questions(n: int = 10) -> list[dict]:
+    """从 wiki source-notes 中随机采样，让 LLM 生成问题+参考答案"""
+    note_files = list((KB_ROOT / "wiki" / "source-notes").rglob("*.md"))
+    if not note_files:
+        print("⚠ 没有 source-notes，使用预设问题")
+        return PRESET_QUESTIONS
+
+    samples = random.sample(note_files, min(n * 2, len(note_files)))
+    questions = []
+    for fpath in samples[:n]:
+        try:
+            text = fpath.read_text(encoding="utf-8", errors="ignore")[:1500]
+            resp = call_llm(
+                "你是一个知识库评估助手。根据给定的文档内容，生成一个具体的问题和对应的参考答案。"
+                "输出 JSON 格式：{\"question\": \"...\", \"ground_truth\": \"...\"}",
+                f"文档内容：\n{text}\n\n请生成一个问题和参考答案（JSON）："
+            )
+            # 提取 JSON
+            m = re.search(r'\{[^{}]+\}', resp, re.DOTALL)
+            if m:
+                obj = json.loads(m.group())
+                if obj.get("question") and obj.get("ground_truth"):
+                    questions.append(obj)
+                    print(f"  ✓ 生成问题: {obj['question'][:60]}...")
+        except Exception as e:
+            print(f"  ✗ 生成失败: {e}")
+        if len(questions) >= n:
+            break
+
+    return questions if questions else PRESET_QUESTIONS
+
+PRESET_QUESTIONS = [
+    {"question": "什么是 RAG？", "ground_truth": "RAG 是检索增强生成，结合检索系统和大语言模型提升答案质量。"},
+    {"question": "WikiLoop 和 RAG 有什么区别？", "ground_truth": "WikiLoop 在 RAG 基础上增加了显式的结构化 wiki 知识层，知识可审计可版本化。"},
+    {"question": "什么是 RRF 算法？", "ground_truth": "RRF 是倒数排名融合算法，用于合并多个检索系统的排名结果。"},
+]
+
+# ── RAGAS 评估（手动实现简化版） ──────────────────────────────────────────────
+def score_faithfulness(answer: str, contexts: list[str]) -> float:
+    """忠实度：答案中每个声明是否都能从 context 中找到支撑"""
+    ctx_text = "\n".join(contexts)
+    resp = call_llm(
+        "你是一个评估助手。判断答案中的每个声明是否都有 context 支撑。"
+        "输出 0.0-1.0 的分数（1.0=完全有支撑，0.0=完全无支撑），只输出数字。",
+        f"Context:\n{ctx_text[:2000]}\n\nAnswer:\n{answer}\n\n忠实度分数："
+    )
+    try:
+        return float(re.search(r'[\d.]+', resp).group())
+    except Exception:
+        return 0.5
+
+def score_answer_relevancy(question: str, answer: str) -> float:
+    """答案相关性：答案是否回答了问题"""
+    resp = call_llm(
+        "你是一个评估助手。判断答案是否充分回答了问题。"
+        "输出 0.0-1.0 的分数（1.0=完全回答，0.0=完全没回答），只输出数字。",
+        f"Question: {question}\n\nAnswer: {answer}\n\n相关性分数："
+    )
+    try:
+        return float(re.search(r'[\d.]+', resp).group())
+    except Exception:
+        return 0.5
+
+def score_context_precision(question: str, contexts: list[str]) -> float:
+    """上下文精度：一次调用批量评估所有 context 片段"""
+    if not contexts:
+        return 0.0
+    numbered = "\n".join(f"[{i+1}] {ctx[:400]}" for i, ctx in enumerate(contexts))
+    resp = call_llm(
+        "你是一个评估助手。对于每个编号的 context 片段，判断它对回答问题是否有用。"
+        f"输出一个长度为 {len(contexts)} 的 0/1 列表，用逗号分隔，例如：1,0,1,0,1",
+        f"Question: {question}\n\nContexts:\n{numbered}\n\n有用性列表（{len(contexts)}个，逗号分隔）："
+    )
+    try:
+        scores = [int(x.strip()) for x in resp.split(',') if x.strip() in ('0', '1')]
+        if not scores:
+            return 0.5
+        return sum(scores) / len(contexts)
+    except Exception:
+        return 0.5
+
+def score_context_recall(question: str, contexts: list[str], ground_truth: str) -> float:
+    """上下文召回：ground truth 中的信息是否被 context 覆盖"""
+    ctx_text = "\n".join(contexts)
+    resp = call_llm(
+        "判断 context 是否包含了足够的信息来回答问题（参考标准答案）。"
+        "输出 0.0-1.0 的分数（1.0=完全覆盖，0.0=完全未覆盖），只输出数字。",
+        f"Question: {question}\nGround Truth: {ground_truth}\nContext:\n{ctx_text[:2000]}\n\n召回率分数："
+    )
+    try:
+        return float(re.search(r'[\d.]+', resp).group())
+    except Exception:
+        return 0.5
+
+def generate_answer(question: str, contexts: list[str]) -> str:
+    ctx_text = "\n".join(contexts)
+    return call_llm(
+        "你是一个知识库助手。根据给定的 context 回答问题，不要引入 context 之外的信息。",
+        f"Context:\n{ctx_text[:2000]}\n\nQuestion: {question}\n\nAnswer:"
+    )
+
+# ── 主流程 ────────────────────────────────────────────────────────────────────
+def evaluate(questions: list[dict], system_name: str, context_fn) -> dict:
+    scores = {"faithfulness": [], "answer_relevancy": [], "context_precision": [], "context_recall": []}
+    print(f"\n{'='*50}")
+    print(f"评估系统: {system_name}")
+    print(f"{'='*50}")
+
+    for i, q in enumerate(questions, 1):
+        question = q["question"]
+        ground_truth = q["ground_truth"]
+        print(f"\n[{i}/{len(questions)}] {question[:60]}...")
+
+        contexts = context_fn(question)
+        answer = generate_answer(question, contexts)
+        print(f"  检索到 {len(contexts)} 个 context 片段")
+
+        f  = score_faithfulness(answer, contexts)
+        ar = score_answer_relevancy(question, answer)
+        cp = score_context_precision(question, contexts)
+        cr = score_context_recall(question, contexts, ground_truth)
+
+        scores["faithfulness"].append(f)
+        scores["answer_relevancy"].append(ar)
+        scores["context_precision"].append(cp)
+        scores["context_recall"].append(cr)
+        print(f"  F={f:.2f} AR={ar:.2f} CP={cp:.2f} CR={cr:.2f}")
+
+    return {k: sum(v)/len(v) if v else 0 for k, v in scores.items()}
+
+def main():
+    print("\n=== WikiLoop vs Naive RAG 评估 ===\n")
+
+    # 生成测试问题
+    # 使用预设的 RAG 主题问题集（内容来自 KB 中的高质量 source-notes）
+    preset_path = os.path.join(os.path.dirname(__file__), "questions_rag.json")
+    if os.path.exists(preset_path):
+        print(f"加载预设问题集：{preset_path}")
+        with open(preset_path) as f:
+            questions = json.load(f)
+    else:
+        print("生成测试问题集（5题）...")
+        questions = generate_questions(n=5)
+    print(f"共 {len(questions)} 个问题\n")
+
+    # 评估 WikiLoop
+    wikiloop_scores = evaluate(questions, "WikiLoop (kb_context)", wikiloop_context)
+
+    # 评估 Naive RAG
+    naive_scores = evaluate(questions, "Naive RAG (BM25 keyword)", naive_rag_context)
+
+    # 输出对比结果
+    print("\n" + "="*60)
+    print("📊 评估结果对比")
+    print("="*60)
+    metrics = ["faithfulness", "answer_relevancy", "context_precision", "context_recall"]
+    labels  = ["忠实度", "答案相关性", "上下文精度", "上下文召回"]
+    print(f"{'指标':<16} {'WikiLoop':>10} {'Naive RAG':>10} {'提升':>8}")
+    print("-"*48)
+    for m, label in zip(metrics, labels):
+        w = wikiloop_scores[m]
+        n = naive_scores[m]
+        delta = w - n
+        sign = "↑" if delta > 0 else ("↓" if delta < 0 else "→")
+        print(f"{label:<14} {w:>10.3f} {n:>10.3f} {sign}{abs(delta):>6.3f}")
+    print("="*60)
+
+    # 保存结果
+    out = {
+        "questions": questions,
+        "wikiloop": wikiloop_scores,
+        "naive_rag": naive_scores,
+    }
+    out_path = "/tmp/eval_result.json"
+    with open(out_path, "w") as f:
+        json.dump(out, f, ensure_ascii=False, indent=2)
+    print(f"\n结果已保存到 {out_path}")
+
+if __name__ == "__main__":
+    main()

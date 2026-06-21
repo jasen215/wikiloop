@@ -20,6 +20,13 @@ import (
 // level-2 headings, fall back to a single chunk of the whole content.
 // Each returned chunk is ready to pass to Embedder.Encode.
 func chunkDoc(title, content string) []string {
+	// Short documents are not chunked to avoid rank concentration:
+	// multiple low-quality chunks from the same doc can crowd out
+	// other relevant documents in the over-fetch candidate pool.
+	if len([]rune(content)) < 1000 {
+		return []string{content}
+	}
+
 	// Split on lines starting with "## "
 	var sections []struct{ heading, body string }
 	var cur struct{ heading, body string }
@@ -190,8 +197,18 @@ func EmbedDocuments(db *sql.DB, kbRoot string, embedder Embedder, modelName stri
 	return written, skipped, nil
 }
 
-// VecSearch runs cosine KNN using the VecStore.
-// Chunk-level results are deduplicated to one result per document (highest score wins).
+// VecSearch runs cosine KNN using the VecStore with MMR diversity constraint.
+//
+// Problem: chunked documents produce multiple chunks in the top-K results,
+// causing rank concentration — same-doc chunks crowd out other relevant docs.
+//
+// Solution: limit each document to maxPerDoc chunks in the candidate pool
+// before deduplication. This preserves document diversity while still
+// benefiting from fine-grained chunk embeddings.
+//
+// maxPerDoc = max(1, ceil(limit / 5)) — allows up to 1 chunk per 5 result
+// slots, so a 10-result query caps each doc at 2 chunks max.
+//
 // Returns nil (not error) if no vec store exists — callers degrade to FTS-only.
 func VecSearch(kbRoot string, queryVec []float32, layer *string, limit int) ([]SearchResult, error) {
 	if !VecStoreExists(kbRoot) {
@@ -201,28 +218,51 @@ func VecSearch(kbRoot string, queryVec []float32, layer *string, limit int) ([]S
 	if err != nil {
 		return nil, nil
 	}
-	// Over-fetch to account for multiple chunks per doc collapsing into one.
-	raw, err := vs.Query(queryVec, layer, limit*4)
+	// Over-fetch: need more candidates to fill limit after diversity filtering.
+	raw, err := vs.Query(queryVec, layer, limit*8)
 	if err != nil {
 		return nil, err
 	}
-	// Deduplicate: keep highest-scoring chunk per doc_id.
-	seen := make(map[string]int) // doc_id → index in deduped
-	var deduped []SearchResult
+
+	// MMR diversity constraint: limit chunks per document.
+	// maxPerDoc ensures no single document monopolises the candidate pool.
+	maxPerDoc := limit / 5
+	if maxPerDoc < 1 {
+		maxPerDoc = 1
+	}
+
+	// Pass 1: apply per-doc cap, keeping highest-scoring chunks.
+	docChunkCount := make(map[string]int)
+	type candidate struct {
+		r     SearchResult
+		docID string
+	}
+	var candidates []candidate
 	for _, r := range raw {
 		docID := r.DocID
 		if docID == "" {
-			docID = r.ID // fallback for legacy single-chunk entries
+			docID = r.ID
 		}
-		if idx, ok := seen[docID]; ok {
-			if r.VecScore > deduped[idx].VecScore {
-				deduped[idx] = r
-				deduped[idx].ID = docID
+		if docChunkCount[docID] >= maxPerDoc {
+			continue
+		}
+		docChunkCount[docID]++
+		candidates = append(candidates, candidate{r, docID})
+	}
+
+	// Pass 2: deduplicate to one result per document (highest score wins).
+	seen := make(map[string]int) // doc_id → index in deduped
+	var deduped []SearchResult
+	for _, c := range candidates {
+		if idx, ok := seen[c.docID]; ok {
+			if c.r.VecScore > deduped[idx].VecScore {
+				deduped[idx] = c.r
+				deduped[idx].ID = c.docID
 			}
 		} else {
-			seen[docID] = len(deduped)
-			r.ID = docID
-			deduped = append(deduped, r)
+			seen[c.docID] = len(deduped)
+			c.r.ID = c.docID
+			deduped = append(deduped, c.r)
 		}
 		if len(deduped) == limit {
 			break

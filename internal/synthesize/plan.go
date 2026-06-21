@@ -49,14 +49,13 @@ Output a JSON array. Each element must have:
   sources:     list of source-note paths used
 
 Page type rules:
-- concept: a reusable idea, method, or pattern appearing across MULTIPLE sources (minimum 3 sources)
-- comparison: two or more tools, approaches, or claims worth contrasting (minimum 2 sources)
-- decision: a judgment about whether a specific tool/approach suits the current KB's domain (minimum 2 sources)
+- concept: a reusable idea, method, or pattern. Can be generated from a single source-note as an initial draft.
+- comparison: two or more tools, approaches, or claims worth contrasting. Can start with one source if the source itself contains a comparison.
+- decision: a judgment about whether a specific tool/approach suits the current KB's domain.
 
 Do NOT generate:
-- Pages based on a single source-note
 - Pages that duplicate existing ones (listed below)
-- Generic summaries without cross-source insight
+- Generic summaries without insight
 
 Output a JSON array only. No other text.`
 
