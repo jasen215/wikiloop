@@ -63,6 +63,14 @@ python3 eval/eval_wikiloop.py
 | 2026-06-21 | + AND-first FTS + graph_pages wiki-only + minHybridScore=0.025 | 0.720 | 0.206 | 0.330 |
 | （待补充） | Phase 3（实体索引） | — | — | — |
 
+## v2 问题集结果（concept/comparison/decision，含 Hit Rate + MRR）
+
+| 版本 | AR | CP | CR | Hit Rate | MRR |
+|---|---|---|---|---|---|
+| 当前（AND-first FTS + 933篇综合页） | 0.992 | 0.411 | 0.467 | 0.083 | 0.017 |
+
+**结论**：综合类问题的 AR/CP/CR 全面优于 v1 技术细节题。Hit Rate 极低（0.083）说明综合页 description 太抽象，向量无法精准定位，是下一步优化重点。
+
 ## 问题集说明
 
 `questions_rag.json`：10 道 RAG/LLM Wiki 主题问题，ground truth 来自 KB 中高质量 source-notes，覆盖：
