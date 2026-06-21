@@ -176,11 +176,39 @@ wikiloop lint
 | `wikiloop distill` | （在 `serve`/watcher 内运行）通过 LLM 把 `raw/` 新文件转为 `wiki/source-notes/`。非独立子命令，自动触发。 |
 | `wikiloop synthesize [--topic X] [--full]` | 从 source-notes 生成 concept/comparison/decision 页面。默认增量；`--full` 全量重跑；`--topic` 限定标签/标题匹配。 |
 | `wikiloop synthesize --gaps --topic X` | 对某主题做知识缺口分析，报告写入 `index/gaps/<slug>.md`。 |
+| `wikiloop import-lark <URL>` | 导入飞书/Lark Wiki 文档，并将内嵌多维表格完整展开为本地可搜索数据集。需要已登录的 `lark-cli`。 |
 | `wikiloop lint` | 健康检查 wiki 页面：缺失 frontmatter 字段、断裂的来源链接。 |
 | `wikiloop status` | 打印索引统计（文档/嵌入数、索引大小）。 |
 | `wikiloop service <install\|uninstall\|start\|stop\|status\|logs>` | 管理系统服务（launchd / systemd）。 |
 
 **LLM 配置**（KB 根目录的 `config.yaml` 的 `distill` 段）是 `distill` 和 `synthesize` 的必要条件。格式见 MCP Server 章节；`api_type` 选择 `openai`（默认）或 `anthropic`。
+
+DeepSeek 使用 OpenAI 兼容接口：
+
+```yaml
+distill:
+  base_url: "https://api.deepseek.com"
+  model: "deepseek-chat"
+  api_type: "openai"
+```
+
+建议不要把 Token 写入 `config.yaml`，改用环境变量：
+
+```bash
+export WIKILOOP_DISTILL_TOKEN="your-api-key"
+```
+
+设置页也提供 **Use DeepSeek** 一键预设。Base URL 是否带结尾 `/v1` 均可。
+
+### 导入飞书/Lark Wiki 页面
+
+```bash
+wikiloop import-lark "https://example.larkoffice.com/wiki/..."
+```
+
+内嵌多维表格会自动分页读取。原始表格以 `.snapshot.tsv` 保存用于审计；
+WikiLoop 只索引 `records-deduplicated.txt` 去重合集。去重规则包括相同链接，
+以及同一昵称重复提交的相同标题；不同昵称的同名作品会保留。
 
 ### synthesize 工作流：从原始资料到主题汇总
 

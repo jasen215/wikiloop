@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/jasen215/wikiloop/internal/llmurl"
 )
 
 // Config holds LLM API configuration (shared with distill).
@@ -32,11 +34,11 @@ func (c Config) isAnthropic() bool {
 
 // PagePlan describes one wiki page the LLM proposes to generate.
 type PagePlan struct {
-	Type        string   `json:"type"`         // "concept", "comparison", or "decision"
-	Title       string   `json:"title"`        // proposed page title
-	Slug        string   `json:"slug"`         // filename slug, e.g. "llm-memory-systems"
-	Description string   `json:"description"`  // one-sentence purpose
-	Sources     []string `json:"sources"`      // wiki/source-notes/ paths to use
+	Type        string   `json:"type"`        // "concept", "comparison", or "decision"
+	Title       string   `json:"title"`       // proposed page title
+	Slug        string   `json:"slug"`        // filename slug, e.g. "llm-memory-systems"
+	Description string   `json:"description"` // one-sentence purpose
+	Sources     []string `json:"sources"`     // wiki/source-notes/ paths to use
 }
 
 const planSystemPrompt = `You are a knowledge-base curator. Given a list of source-note summaries, identify opportunities to synthesize higher-level wiki pages following the Karpathy LLM Wiki structure.
@@ -162,7 +164,7 @@ func callAnthropicAPI(cfg Config, system, userContent string) (string, error) {
 		Model: cfg.Model, MaxTokens: 4096, System: system,
 		Messages: []message{{Role: "user", Content: userContent}},
 	})
-	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(cfg.BaseURL, "/")+"/v1/messages", bytes.NewReader(reqBody))
+	req, err := http.NewRequest(http.MethodPost, llmurl.Endpoint(cfg.BaseURL, "/v1/messages"), bytes.NewReader(reqBody))
 	if err != nil {
 		return "", err
 	}
@@ -204,7 +206,7 @@ func callOpenAIAPI(cfg Config, system, userContent string) (string, error) {
 		Model: cfg.Model, MaxTokens: 4096,
 		Messages: []message{{Role: "system", Content: system}, {Role: "user", Content: userContent}},
 	})
-	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(cfg.BaseURL, "/")+"/v1/chat/completions", bytes.NewReader(reqBody))
+	req, err := http.NewRequest(http.MethodPost, llmurl.Endpoint(cfg.BaseURL, "/v1/chat/completions"), bytes.NewReader(reqBody))
 	if err != nil {
 		return "", err
 	}

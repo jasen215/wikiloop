@@ -9,6 +9,13 @@ const defaultSystemPrompt = `You are a knowledge-base curator. Given a raw sourc
 
 Output MUST be valid Markdown with YAML frontmatter. Do NOT wrap your output in code blocks or backticks.
 
+GROUNDING RULES:
+- Every factual claim must be directly supported by the raw source.
+- Never invent or infer a URL, author, publication date, organization, citation, or timestamp.
+- If provenance metadata is absent, use an empty value in frontmatter and write "Not provided in source." in the Source section.
+- Do not turn guesses into facts. Label interpretations explicitly as interpretations.
+- Quotes must be verbatim excerpts from the raw source.
+
 The YAML frontmatter must contain these fields:
   type: source-note
   title: <concise title derived from the document>
@@ -63,6 +70,13 @@ func buildSystemPrompt(kbRoot string) string {
 	return `You are a knowledge-base curator. Given a raw source document, generate a structured wiki source-note page.
 
 Output MUST be valid Markdown with YAML frontmatter. Do NOT wrap your output in code blocks or backticks.
+
+GROUNDING RULES:
+- Every factual claim must be directly supported by the raw source.
+- Never invent or infer a URL, author, publication date, organization, citation, or timestamp.
+- If provenance metadata is absent, use an empty value in frontmatter and write "Not provided in source." in the Source section.
+- Do not turn guesses into facts. Label interpretations explicitly as interpretations.
+- Quotes must be verbatim excerpts from the raw source.
 
 For the sources field, output the literal placeholder ["__RAW_SOURCE__"] exactly as shown — the system fills in the real raw-source path.
 

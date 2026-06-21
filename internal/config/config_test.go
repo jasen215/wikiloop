@@ -81,6 +81,7 @@ distill:
   base_url: "http://llm.local"
   token: "tok123"
   model: "claude-3"
+  api_type: "anthropic"
 embedding:
   idle_timeout: "15m"
 `
@@ -101,6 +102,9 @@ embedding:
 	if cfg.Distill.BaseURL != "http://llm.local" {
 		t.Errorf("base_url = %q", cfg.Distill.BaseURL)
 	}
+	if cfg.Distill.APIType != "anthropic" {
+		t.Errorf("api_type = %q, want anthropic", cfg.Distill.APIType)
+	}
 	if cfg.Embedding.IdleTimeout != 15*time.Minute {
 		t.Errorf("idle_timeout = %v, want 15m0s", cfg.Embedding.IdleTimeout)
 	}
@@ -110,6 +114,8 @@ func TestLoadConfig_EnvOverride(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("WIKILOOP_API_KEY", "envkey")
 	t.Setenv("WIKILOOP_PORT", "7777")
+	t.Setenv("WIKILOOP_DISTILL_TOKEN", "deepseek-secret")
+	t.Setenv("WIKILOOP_DISTILL_API_TYPE", "openai")
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -120,5 +126,28 @@ func TestLoadConfig_EnvOverride(t *testing.T) {
 	}
 	if cfg.Server.Port != 7777 {
 		t.Errorf("port = %d, want 7777", cfg.Server.Port)
+	}
+	if cfg.Distill.Token != "deepseek-secret" {
+		t.Errorf("distill token env override was not applied")
+	}
+	if cfg.Distill.APIType != "openai" {
+		t.Errorf("distill api_type = %q, want openai", cfg.Distill.APIType)
+	}
+}
+
+func TestSaveConfigUsesPrivatePermissions(t *testing.T) {
+	dir := t.TempDir()
+	cfg := &Config{}
+	cfg.Distill.Token = "secret"
+
+	if err := Save(dir, cfg); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(filepath.Join(dir, "config.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("config.yaml permissions = %o, want 600", got)
 	}
 }
