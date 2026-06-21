@@ -39,7 +39,7 @@ def call_llm(system: str, user: str) -> str:
         },
         json={
             "model": LLM_MODEL,
-            "max_tokens": 4096,
+            "max_tokens": 8192,
             "system": system,
             "messages": [{"role": "user", "content": user}],
         },
@@ -56,7 +56,7 @@ def call_llm(system: str, user: str) -> str:
             },
             json={
                 "model": LLM_MODEL,
-                "max_tokens": 4096,
+                "max_tokens": 8192,
                 "system": system,
                 "messages": [{"role": "user", "content": user}],
             },
