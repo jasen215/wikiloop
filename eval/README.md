@@ -60,7 +60,7 @@ python3 eval/eval_wikiloop.py
 | 2026-06-20 | Phase 2（去阈值 synthesize，12→18 篇综合页）| 0.610 | 0.282 | 0.390 |
 | 2026-06-21 | Phase2完整(933篇) + kind过滤 + 引用强制 + 上下文压缩 + limit=10 | 0.630 | 0.289 | 0.260 |
 | 2026-06-21 | + 压缩优化（Jaccard 0.5 + 低质量综合页过滤 description<30字） | 0.510 | 0.324 | 0.300 |
-| （待补充） | Phase 2（Wiki 内容层级扩充） | — | — | — |
+| 2026-06-21 | + AND-first FTS + graph_pages wiki-only + minHybridScore=0.025 | 0.720 | 0.206 | 0.330 |
 | （待补充） | Phase 3（实体索引） | — | — | — |
 
 ## 问题集说明
