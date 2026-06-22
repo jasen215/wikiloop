@@ -229,7 +229,7 @@ func CallLLM(config Config, kbRoot, rawContent, relatedContext string) (string, 
 func callAnthropic(config Config, system, userContent string) (string, error) {
 	reqBody := anthropicRequest{
 		Model:     config.Model,
-		MaxTokens: 4096,
+		MaxTokens: 8192,
 		System:    system,
 		Messages:  []anthropicMessage{{Role: "user", Content: userContent}},
 	}
@@ -288,7 +288,7 @@ func callOpenAI(config Config, system, userContent string) (string, error) {
 
 	reqBody, err := json.Marshal(request{
 		Model:     config.Model,
-		MaxTokens: 4096,
+		MaxTokens: 8192,
 		Messages: []message{
 			{Role: "system", Content: system},
 			{Role: "user", Content: userContent},
