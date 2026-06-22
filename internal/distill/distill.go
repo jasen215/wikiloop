@@ -339,8 +339,79 @@ func doHTTP(req *http.Request) ([]byte, error) {
 	return body, nil
 }
 
+// isTechnicalCatalog detects documents that are too technical/dense for LLM
+// distillation — they contain large numbered entity lists (e.g. M01-M43) or
+// many database table identifiers. These should be lightly processed to
+// preserve all precise identifiers for FTS search.
+func isTechnicalCatalog(content string) bool {
+	lines := strings.Split(content, "\n")
+	if len(lines) < 150 {
+		return false
+	}
+	// Count numbered entity patterns: M01, M02... or similar coded lists
+	numberedRe := regexp.MustCompile(`\bM\d{2}\b`)
+	tableRe := regexp.MustCompile(`(?i)(iceberg_|dim_|dwd_|hive_|matrixdb|\.im_edge\.)`)
+	numberedCount := 0
+	tableCount := 0
+	for _, line := range lines {
+		if numberedRe.MatchString(line) {
+			numberedCount++
+		}
+		if tableRe.MatchString(line) {
+			tableCount++
+		}
+	}
+	return numberedCount >= 5 || tableCount >= 10
+}
+
+// lightweightNote generates a source-note without LLM distillation.
+// The full de-noised content is preserved for FTS indexing.
+// Only frontmatter metadata is generated from the file name and content.
+func lightweightNote(rawPath, rawDocID, content string) string {
+	// Extract title from first heading or filename
+	title := strings.TrimSuffix(filepath.Base(rawPath), filepath.Ext(rawPath))
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "# ") {
+			title = strings.TrimPrefix(line, "# ")
+			break
+		}
+		if strings.HasPrefix(line, "**") && strings.HasSuffix(line, "**") {
+			title = strings.Trim(line, "*")
+			break
+		}
+	}
+
+	// Remove base64 image data (large, useless for search)
+	imgRe := regexp.MustCompile(`!\[.*?\]\(data:image/[^;]+;base64,[^)]{20,}\)`)
+	cleaned := imgRe.ReplaceAllString(content, "<!-- image removed -->")
+
+	// Remove markdown image references with media paths
+	mediaRe := regexp.MustCompile(`!\[.*?\]\(media/[^)]+\)`)
+	cleaned = mediaRe.ReplaceAllString(cleaned, "")
+
+	now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+
+	return fmt.Sprintf(`---
+type: source-note
+title: %q
+description: ""
+tags: []
+resource: ""
+sources:
+  - %s
+timestamp: %q
+processing: lightweight
+---
+
+%s
+`, title, rawDocID, now, strings.TrimSpace(cleaned))
+}
+
 // DistillFile reads the raw file at rawPath, calls the LLM with optional
 // related-page context from vector search, and writes the source-note.
+// For technical catalog documents (large numbered lists, many table names),
+// lightweight processing is used instead to preserve all identifiers for FTS.
 // embedder may be nil — when nil, vector lookup is skipped.
 func DistillFile(config Config, rawPath, kbRoot string, embedder kb.Embedder) error {
 	rawContent, err := os.ReadFile(rawPath)
@@ -348,14 +419,26 @@ func DistillFile(config Config, rawPath, kbRoot string, embedder kb.Embedder) er
 		return fmt.Errorf("read raw file: %w", err)
 	}
 
-	relatedContext := findRelatedNotes(kbRoot, string(rawContent), embedder)
+	var generated string
 
-	generated, err := CallLLM(config, kbRoot, string(rawContent), relatedContext)
-	if err != nil {
-		return fmt.Errorf("call LLM: %w", err)
+	if isTechnicalCatalog(string(rawContent)) {
+		// Lightweight path: preserve full content for FTS, skip LLM
+		rawDir := filepath.Join(kbRoot, "raw")
+		rel, err := filepath.Rel(rawDir, rawPath)
+		if err != nil {
+			return fmt.Errorf("relative path: %w", err)
+		}
+		rawDocID := "raw/" + filepath.ToSlash(rel)
+		generated = lightweightNote(rawPath, rawDocID, string(rawContent))
+		fmt.Printf("  [lightweight] %s\n", filepath.Base(rawPath))
+	} else {
+		relatedContext := findRelatedNotes(kbRoot, string(rawContent), embedder)
+		generated, err = CallLLM(config, kbRoot, string(rawContent), relatedContext)
+		if err != nil {
+			return fmt.Errorf("call LLM: %w", err)
+		}
+		generated = StripCodeFences(generated)
 	}
-
-	generated = StripCodeFences(generated)
 
 	rawDir := filepath.Join(kbRoot, "raw")
 	rel, err := filepath.Rel(rawDir, rawPath)
