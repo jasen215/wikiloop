@@ -28,41 +28,38 @@ MCP_API_KEY  = cfg["server"].get("api_key", "")
 print(f"LLM: {LLM_MODEL} @ {LLM_BASE_URL}")
 print(f"MCP: {MCP_URL}")
 
-# ── LLM 调用（Anthropic 兼容） ────────────────────────────────────────────────
+# ── LLM 调用（Anthropic 兼容，指数退避重试） ─────────────────────────────────
 def call_llm(system: str, user: str) -> str:
-    resp = requests.post(
-        f"{LLM_BASE_URL}/v1/messages",
-        headers={
-            "x-api-key": LLM_TOKEN,
-            "anthropic-version": "2023-06-01",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": LLM_MODEL,
-            "max_tokens": 8192,
-            "system": system,
-            "messages": [{"role": "user", "content": user}],
-        },
-        timeout=60,
-    )
-    if resp.status_code == 429:
-        time.sleep(10)
-        resp = requests.post(
-            f"{LLM_BASE_URL}/v1/messages",
-            headers={
-                "x-api-key": LLM_TOKEN,
-                "anthropic-version": "2023-06-01",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": LLM_MODEL,
-                "max_tokens": 8192,
-                "system": system,
-                "messages": [{"role": "user", "content": user}],
-            },
-            timeout=60,
-        )
-    resp.raise_for_status()
+    payload = {
+        "model": LLM_MODEL,
+        "max_tokens": 8192,
+        "system": system,
+        "messages": [{"role": "user", "content": user}],
+    }
+    headers = {
+        "x-api-key": LLM_TOKEN,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+    }
+    for attempt in range(5):
+        try:
+            resp = requests.post(
+                f"{LLM_BASE_URL}/v1/messages",
+                headers=headers, json=payload, timeout=120,
+            )
+            if resp.status_code == 429:
+                wait = 2 ** attempt * 5  # 5s, 10s, 20s, 40s, 80s
+                print(f"  [429] retry in {wait}s ...", flush=True)
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            break
+        except requests.exceptions.Timeout:
+            wait = 2 ** attempt * 5
+            print(f"  [timeout] retry in {wait}s ...", flush=True)
+            time.sleep(wait)
+    else:
+        raise RuntimeError("call_llm: exceeded max retries")
     data = resp.json()
     # 兼容 Anthropic 和 OpenAI 格式
     if "content" in data and isinstance(data["content"], list):
@@ -101,12 +98,17 @@ def mcp_call(method: str, params: dict) -> dict:
         timeout=30)
     return resp.json().get("result", {})
 
+NO_VEC = os.environ.get("WIKILOOP_NO_VEC", "").lower() in ("1", "true", "yes")
+
 def wikiloop_context(question: str) -> list[str]:
     """调用 WikiLoop MCP kb_context 工具，返回 context 片段列表"""
     try:
+        args = {"question": question, "limit": 5}
+        if NO_VEC:
+            args["no_vec"] = True
         result = mcp_call("tools/call", {
             "name": "kb_context",
-            "arguments": {"question": question, "limit": 5}
+            "arguments": args
         })
         content_text = ""
         for item in result.get("content", []):
