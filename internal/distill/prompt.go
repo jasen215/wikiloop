@@ -9,6 +9,11 @@ const defaultSystemPrompt = `You are a knowledge-base curator. Given a raw sourc
 
 Output MUST be valid Markdown with YAML frontmatter. Do NOT wrap your output in code blocks or backticks.
 
+LANGUAGE RULE: Write all content in the SAME language as the source document. Chinese source → Chinese output.
+
+ALIAS RULE (MANDATORY): In every Key Facts bullet, inline ALL known aliases, abbreviations, and cross-language equivalents.
+  BAD:  "召回率偏低"  GOOD: "Context Recall（CR，召回率，检索覆盖率）偏低（0.32）"
+
 The YAML frontmatter must contain these fields:
   type: source-note
   title: <concise title derived from the document>
@@ -36,6 +41,9 @@ IMPORTANT: Preserve ALL specific terms, names, codes, acronyms, and identifiers 
 (e.g. SKU, BOM, API names, system names, field names, error codes, product names, data domain labels).
 These exact terms are critical for search — do not paraphrase or generalize them away.
 Each bullet must contain at least one specific number, metric, or named entity.
+ALIAS RULE: Inline ALL known aliases, abbreviations, and cross-language equivalents directly in each claim.
+  BAD:  "CR 偏低需要优化"
+  GOOD: "Context Recall（CR，召回率，检索覆盖率）偏低（0.32），需通过扩大 wiki 覆盖度优化"
 
 CRITICAL RULE FOR STRUCTURED DOCUMENTS: If the source contains numbered or coded items
 (e.g. M01-M43, API endpoints, field catalogs, table lists, equipment codes), you MUST
@@ -73,6 +81,16 @@ func buildSystemPrompt(kbRoot string) string {
 	prompt := `You are a knowledge-base curator. Given a raw source document, generate a structured wiki source-note page.
 
 Output MUST be valid Markdown with YAML frontmatter. Do NOT wrap your output in code blocks or backticks.
+
+LANGUAGE RULE: Write all content (summary, key_claims, terms, etc.) in the SAME language as the source document.
+If the source is Chinese, output Chinese. If English, output English. Do NOT switch languages.
+
+ALIAS RULE (MANDATORY): In every key_claim, inline ALL known aliases, abbreviations, and cross-language equivalents.
+  BAD:  "召回率偏低需要优化"
+  GOOD: "Context Recall（CR，召回率，检索覆盖率）偏低（0.32），需通过扩大 wiki 覆盖度优化"
+  BAD:  "FTS检索性能较好"
+  GOOD: "FTS（Full-Text Search，全文检索，BM25算法）检索性能优于向量搜索（Vector Search）在精确术语匹配场景"
+This is critical for search: users may query with any variant of a term.
 
 For the sources field, output the literal placeholder ["__RAW_SOURCE__"] exactly as shown — the system fills in the real raw-source path.
 

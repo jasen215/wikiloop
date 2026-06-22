@@ -42,6 +42,17 @@ HOW TO USE:
   - kb_status reports index health; kb_reindex refreshes the FTS index after the
     KB files change.
 
+QUERY EXPANSION (mandatory before every search):
+  Before calling kb_context or kb_search, expand the user's query into all known
+  aliases, abbreviations, and cross-language equivalents, then search for each variant
+  or combine them. The KB uses FTS (full-text search), so exact term matching matters.
+  Examples:
+    "召回率" → also search "recall rate", "Context Recall", "CR", "检索覆盖"
+    "手机物料" → also search "mobile material", "M17", "mdm_mobile_mat", "物料主数据"
+    "蒸馏" → also search "distill", "distillation", "source-note", "知识蒸馏"
+  You already know the domain — use that knowledge to expand queries before searching.
+  Do NOT search only the literal user term; always include at least 2-3 variants.
+
 DO NOT use WikiLoop for questions answerable from the current code, file structure,
 or git history — read those directly instead. WikiLoop is read-only knowledge; it
 does not reflect uncommitted local edits.

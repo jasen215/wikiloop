@@ -8,6 +8,9 @@ sources:
   - raw/
 timestamp: ""  # ISO 8601, e.g. 2026-06-14T09:00:00Z
 key_claims: []  # REQUIRED: 5-8 specific, searchable claims in the source's original language. Each must be a complete factual statement with concrete terms/numbers. Cover all major points — more claims = better recall coverage.
+               # ALIAS RULE: Inline ALL known aliases, abbreviations, and cross-language equivalents directly in each claim.
+               # BAD:  "CR 偏低需要优化"
+               # GOOD: "Context Recall（CR，召回率，检索覆盖率）偏低（0.32），需通过扩大 wiki 覆盖度优化"
 related_to: []
 contradicts: []
 supports: []
@@ -40,6 +43,14 @@ supports: []
   - BAD: "UnWeaver is more efficient than GraphRAG"
   - GOOD: "ChromaDB suits prototypes under 100K vectors; Qdrant suits production 100K-1M with filtering"
   - BAD: "Different vector databases suit different use cases"
+
+  ALIAS RULE (MANDATORY for search coverage):
+  Inline ALL known aliases, abbreviations, and cross-language equivalents directly in each claim.
+  - BAD:  "CR 偏低需要优化"
+  - GOOD: "Context Recall（CR，召回率，检索覆盖率）偏低（0.32），需通过扩大 wiki 覆盖度优化"
+  - BAD:  "使用 FTS 检索"
+  - GOOD: "使用 FTS（Full-Text Search，全文检索，BM25）检索，配合 RRF（倒数排名融合）合并结果"
+  This ensures FTS search finds the document regardless of which term the user queries.
 
   STRUCTURED DOCUMENT RULE (tables, numbered lists, entity catalogs):
   If the source contains numbered/coded items (e.g. M01-M43, API list, field catalog),
