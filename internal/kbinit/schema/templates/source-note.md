@@ -2,11 +2,15 @@
 type: source-note
 title: ""
 description: ""   # REQUIRED: 1-2 sentences. Must include Chinese keywords matching the source language PLUS ≥2 specific technical terms/numbers. Example: "介绍UnWeaver框架如何在不构建知识图谱的情况下实现细粒度RAG检索，索引Token消耗仅为GraphRAG的1/10。"
-tags: []
+tags: []          # REQUIRED: 3-6 domain classification tags (e.g. RAG, 主数据, 智能制造, 数据治理). NOT random keywords.
+doc_type: ""      # REQUIRED: one of: 技术文章 | 白皮书 | 技术规范 | 项目文档 | 会议纪要 | 分析报告 | 教程 | 开源项目 | 产品文档
 resource: ""
 sources:
   - raw/
-timestamp: ""  # ISO 8601, e.g. 2026-06-14T09:00:00Z
+timestamp: ""     # REQUIRED: ISO 8601 date extracted from the document itself (publication date, article date, report date).
+                  # Look for: 发布日期, 文章日期, 报告时间, byline date, footer date, URL date pattern (YYYY-MM-DD or YYYY/MM).
+                  # If multiple dates found, use the earliest (creation/publication date).
+                  # ONLY use today's date as last resort if NO date exists anywhere in the document.
 key_claims: []  # REQUIRED: 5-8 specific, searchable claims in the source's original language. Each must be a complete factual statement with concrete terms/numbers. Cover all major points — more claims = better recall coverage.
                # ALIAS RULE: Inline ALL known aliases, abbreviations, and cross-language equivalents directly in each claim.
                # BAD:  "CR 偏低需要优化"

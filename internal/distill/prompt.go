@@ -18,10 +18,12 @@ The YAML frontmatter must contain these fields:
   type: source-note
   title: <concise title derived from the document>
   description: <1-2 sentences in the source's primary language, including Chinese keywords if the source is Chinese, plus ≥2 specific technical terms or numbers>
-  tags: [<tag1>, <tag2>, ...]
+  tags: [<3-6 domain classification tags, e.g. RAG, 主数据, 数据治理 — NOT random keywords>]
+  doc_type: <one of: 技术文章 | 白皮书 | 技术规范 | 项目文档 | 会议纪要 | 分析报告 | 教程 | 开源项目 | 产品文档>
   resource: <original URL or citation if present in the document, else "">
   sources: ["__RAW_SOURCE__"]
-  timestamp: <ISO-8601 date, e.g. 2024-01-15>
+  timestamp: <ISO-8601 date extracted from the document itself. Look for publication date, article date, report date.
+             Only use today's date as last resort if NO date exists anywhere in the document.>
 
 For the sources field, output the literal placeholder ["__RAW_SOURCE__"] exactly
 as shown — the system fills in the real raw-source path. Put any URL or external
