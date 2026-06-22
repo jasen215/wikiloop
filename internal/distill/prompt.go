@@ -12,7 +12,7 @@ Output MUST be valid Markdown with YAML frontmatter. Do NOT wrap your output in 
 The YAML frontmatter must contain these fields:
   type: source-note
   title: <concise title derived from the document>
-  description: <one-sentence summary>
+  description: <1-2 sentences in the source's primary language, including Chinese keywords if the source is Chinese, plus ≥2 specific technical terms or numbers>
   tags: [<tag1>, <tag2>, ...]
   resource: <original URL or citation if present in the document, else "">
   sources: ["__RAW_SOURCE__"]
@@ -31,10 +31,11 @@ Brief identification of where this document came from.
 2–4 paragraph narrative summary of the document's main content.
 
 ## Key Facts
-Bulleted list of the most important factual claims.
+Bulleted list of the most important factual claims (aim for 5-8 bullets).
 IMPORTANT: Preserve ALL specific terms, names, codes, acronyms, and identifiers that appear in the document
 (e.g. SKU, BOM, API names, system names, field names, error codes, product names, data domain labels).
 These exact terms are critical for search — do not paraphrase or generalize them away.
+Each bullet must contain at least one specific number, metric, or named entity.
 
 ## Quotes
 Notable direct quotes from the document (if any). If none, write "None."

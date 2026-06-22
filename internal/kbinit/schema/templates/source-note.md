@@ -1,13 +1,13 @@
 ---
 type: source-note
 title: ""
-description: ""   # REQUIRED: 1-2 sentences. Must name ≥2 specific technical terms, tools, or numbers. No vague summaries like "This article discusses...".
+description: ""   # REQUIRED: 1-2 sentences. Must include Chinese keywords matching the source language PLUS ≥2 specific technical terms/numbers. Example: "介绍UnWeaver框架如何在不构建知识图谱的情况下实现细粒度RAG检索，索引Token消耗仅为GraphRAG的1/10。"
 tags: []
 resource: ""
 sources:
   - raw/
 timestamp: ""  # ISO 8601, e.g. 2026-06-14T09:00:00Z
-key_claims: []  # REQUIRED: 3-5 specific, searchable claims. Each must be a complete factual statement with concrete terms/numbers that directly answers a potential question.
+key_claims: []  # REQUIRED: 5-8 specific, searchable claims in the source's original language. Each must be a complete factual statement with concrete terms/numbers. Cover all major points — more claims = better recall coverage.
 related_to: []
 contradicts: []
 supports: []
