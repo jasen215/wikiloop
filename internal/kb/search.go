@@ -494,6 +494,87 @@ func fetchRecencyMap(db *sql.DB, ids []string) map[string]int64 {
 	return m
 }
 
+// multiKindFTS runs FTS queries for each wiki kind in parallel and merges via RRF.
+// This gives each kind (source-note, concept, comparison, decision) an equal chance
+// to surface top results, preventing high-volume kinds from drowning out others.
+// When kind is non-nil, falls back to a single FTSSearchFiltered call.
+func multiKindFTS(db *sql.DB, query string, layer, kind *string, limit int) ([]SearchResult, error) {
+	if kind != nil {
+		return FTSSearchFiltered(db, query, layer, kind, limit)
+	}
+	wikiLayer := "wiki"
+	kinds := []string{"source-note", "concept", "comparison", "decision"}
+
+	type kindResult struct {
+		results []SearchResult
+		err     error
+	}
+	ch := make(chan kindResult, len(kinds))
+
+	for _, k := range kinds {
+		k := k
+		go func() {
+			res, err := FTSSearchFiltered(db, query, &wikiLayer, strPtr(k), limit)
+			ch <- kindResult{res, err}
+		}()
+	}
+
+	// Also run an unrestricted FTS for raw layer and unclassified docs.
+	go func() {
+		res, err := FTSSearchFiltered(db, query, layer, nil, limit)
+		ch <- kindResult{res, err}
+	}()
+
+	// Collect results from all goroutines.
+	total := len(kinds) + 1
+	allLists := make([][]SearchResult, 0, total)
+	for i := 0; i < total; i++ {
+		kr := <-ch
+		if kr.err != nil {
+			continue
+		}
+		if len(kr.results) > 0 {
+			allLists = append(allLists, kr.results)
+		}
+	}
+
+	// RRF merge across all lists.
+	type entry struct {
+		r    SearchResult
+		score float64
+	}
+	merged := make(map[string]*entry)
+	for _, list := range allLists {
+		for rank, r := range list {
+			score := 1.0 / (float64(rrfK) + float64(rank+1))
+			if e, ok := merged[r.ID]; ok {
+				e.score += score
+			} else {
+				merged[r.ID] = &entry{r: r, score: score}
+			}
+		}
+	}
+
+	results := make([]SearchResult, 0, len(merged))
+	for _, e := range merged {
+		r := e.r
+		r.HybridScore = e.score
+		results = append(results, r)
+	}
+	// Sort by RRF score descending.
+	for i := 1; i < len(results); i++ {
+		for j := i; j > 0 && results[j].HybridScore > results[j-1].HybridScore; j-- {
+			results[j], results[j-1] = results[j-1], results[j]
+		}
+	}
+	if len(results) > limit {
+		results = results[:limit]
+	}
+	return results, nil
+}
+
+func strPtr(s string) *string { return &s }
+
 // Search runs FTS + optional vector hybrid search with graph expansion.
 // If embedder != nil and a vec store exists, also runs VecSearch and merges via HybridRank.
 // Always performs GraphExpand and ConflictLinks on the result set.
@@ -506,7 +587,8 @@ func SearchFiltered(db *sql.DB, kbRoot string, query string, layer, kind *string
 	// Over-fetch for rerank: retrieve 4x candidates
 	fetchLimit := limit * 4
 
-	ftsResults, err := FTSSearchFiltered(db, query, layer, kind, fetchLimit)
+	// Multi-kind parallel FTS with RRF merge across source-note/concept/comparison/decision.
+	ftsResults, err := multiKindFTS(db, query, layer, kind, fetchLimit)
 	if err != nil {
 		return nil, nil, nil, err
 	}
