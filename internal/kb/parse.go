@@ -5,6 +5,7 @@ package kb
 import (
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -26,6 +27,7 @@ type ParsedDocument struct {
 	Supersedes  []string
 	Supports    []string
 	RelatedTo   []string
+	Authority   int // 1-5, default 3
 	RawFM       map[string]interface{}
 }
 
@@ -63,6 +65,13 @@ func ParseMarkdown(text string) *ParsedDocument {
 	}
 	if v, ok := fm["description"].(string); ok {
 		pd.Description = v
+	}
+
+	pd.Authority = 3 // default
+	if v, ok := fm["authority"].(string); ok {
+		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= 5 {
+			pd.Authority = n
+		}
 	}
 
 	pd.Tags = asStringList(fm["tags"])

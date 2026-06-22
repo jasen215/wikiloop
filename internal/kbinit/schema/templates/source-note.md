@@ -4,6 +4,12 @@ title: ""
 description: ""   # REQUIRED: 1-2 sentences. Must include Chinese keywords matching the source language PLUS ≥2 specific technical terms/numbers. Example: "介绍UnWeaver框架如何在不构建知识图谱的情况下实现细粒度RAG检索，索引Token消耗仅为GraphRAG的1/10。"
 tags: []          # REQUIRED: 3-6 domain classification tags (e.g. RAG, 主数据, 智能制造, 数据治理). NOT random keywords.
 doc_type: ""      # REQUIRED: one of: 技术文章 | 白皮书 | 技术规范 | 项目文档 | 会议纪要 | 分析报告 | 教程 | 开源项目 | 产品文档
+authority: 3      # REQUIRED: 1-5 信息权威度
+                  # 5 = 一手资料（官方文档、论文、项目作者本人写的）
+                  # 4 = 权威机构（大厂技术博客、知名研究团队实测报告）
+                  # 3 = 专业分析（有数据支撑的深度技术文章）
+                  # 2 = 二手转述（解读/介绍他人工作的文章、公众号转发）
+                  # 1 = 泛泛内容（无具体数据、纯观点、营销文章）
 resource: ""
 sources:
   - raw/

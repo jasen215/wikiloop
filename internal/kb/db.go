@@ -50,6 +50,7 @@ func migrateDescription(db *sql.DB) error {
 	defer rows.Close()
 
 	hasDescription := false
+	hasAuthority := false
 	for rows.Next() {
 		var cid int
 		var name, ctype string
@@ -62,12 +63,20 @@ func migrateDescription(db *sql.DB) error {
 		if name == "description" {
 			hasDescription = true
 		}
+		if name == "authority" {
+			hasAuthority = true
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return err
 	}
 	if !hasDescription {
 		if _, err := db.Exec("ALTER TABLE documents ADD COLUMN description TEXT"); err != nil {
+			return err
+		}
+	}
+	if !hasAuthority {
+		if _, err := db.Exec("ALTER TABLE documents ADD COLUMN authority INTEGER NOT NULL DEFAULT 3"); err != nil {
 			return err
 		}
 	}

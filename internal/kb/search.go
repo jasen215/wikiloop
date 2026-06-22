@@ -22,6 +22,7 @@ type SearchResult struct {
 	Description  string  `json:"description,omitempty"`
 	Snippet      string  `json:"snippet,omitempty"`
 	WikiPriority float64 `json:"wiki_priority"`
+	Authority    int     `json:"authority,omitempty"`
 	FTSRank      float64 `json:"fts_rank,omitempty"`
 	FTSScore     float64 `json:"fts_score,omitempty"`
 	VecScore     float64 `json:"vec_score,omitempty"`
@@ -156,6 +157,7 @@ SELECT
     COALESCE(d.description, '') AS description,
     snippet(document_fts, 2, '[', ']', '...', 10) AS snippet,
     CASE d.layer WHEN 'wiki' THEN 1.0 ELSE 0.0 END AS wiki_priority,
+    COALESCE(d.authority, 3) AS authority,
     rank AS fts_rank
 FROM document_fts
 JOIN documents d ON d.id = document_fts.id
@@ -195,6 +197,7 @@ SELECT
     COALESCE(description, '') AS description,
     '' AS snippet,
     CASE layer WHEN 'wiki' THEN 1.0 ELSE 0.0 END AS wiki_priority,
+    COALESCE(authority, 3) AS authority,
     0.0 AS fts_rank
 FROM documents
 WHERE (title LIKE ? OR content LIKE ?)
@@ -218,7 +221,7 @@ func scanResults(db *sql.DB, sqlStr string, args ...interface{}) ([]SearchResult
 		var r SearchResult
 		if err := rows.Scan(
 			&r.ID, &r.Path, &r.Layer, &r.Kind, &r.Title,
-			&r.Description, &r.Snippet, &r.WikiPriority, &r.FTSRank,
+			&r.Description, &r.Snippet, &r.WikiPriority, &r.Authority, &r.FTSRank,
 		); err != nil {
 			return nil, err
 		}
@@ -341,6 +344,11 @@ func HybridRank(ftsResults, vecResults []SearchResult, boostMap map[string]float
 					rrfScore += recencyBoost(ts)
 				}
 			}
+		}
+		// Authority boost: each extra point above baseline (3) adds ~0.005 to score.
+		// authority=5 gets +0.010, authority=4 gets +0.005, authority=1/2 gets penalty.
+		if r.Authority > 0 {
+			rrfScore += float64(r.Authority-3) * 0.005
 		}
 		if boostMap != nil {
 			rrfScore += boostMap[r.ID] * 0.01
@@ -509,19 +517,25 @@ func multiKindFTS(db *sql.DB, query string, layer, kind *string, limit int) ([]S
 		results []SearchResult
 		err     error
 	}
-	ch := make(chan kindResult, len(kinds))
+	ch := make(chan kindResult, len(kinds)+1)
 
 	for _, k := range kinds {
 		k := k
 		go func() {
-			res, err := FTSSearchFiltered(db, query, &wikiLayer, strPtr(k), limit)
+			// Use a large limit for source-notes (high volume kind) so lower-ranked
+			// but relevant results aren't truncated before the RRF merge.
+			perLimit := limit * 3
+			if k == "source-note" {
+				perLimit = limit * 10
+			}
+			res, err := FTSSearchFiltered(db, query, &wikiLayer, strPtr(k), perLimit)
 			ch <- kindResult{res, err}
 		}()
 	}
 
-	// Also run an unrestricted FTS for raw layer and unclassified docs.
+	// Also run an unrestricted FTS to catch raw-layer and unclassified docs.
 	go func() {
-		res, err := FTSSearchFiltered(db, query, layer, nil, limit)
+		res, err := FTSSearchFiltered(db, query, layer, nil, limit*3)
 		ch <- kindResult{res, err}
 	}()
 

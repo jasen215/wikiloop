@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS documents (
     content TEXT NOT NULL,
     content_hash TEXT NOT NULL,
     source_uri TEXT,
-    updated_at INTEGER NOT NULL
+    updated_at INTEGER NOT NULL,
+    authority INTEGER NOT NULL DEFAULT 3
 );
 
 CREATE TABLE IF NOT EXISTS links (
