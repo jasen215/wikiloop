@@ -26,6 +26,8 @@ type ContextBundle struct {
 
 // minHybridScore is the minimum hybrid score for a wiki page to be included
 // in the context bundle. Results below this threshold are likely noise.
+// Note: multiKindFTS parallel RRF distributes scores across more lists,
+// so scores are naturally lower than single-FTS mode (~0.02-0.03 range).
 const minHybridScore = 0.025
 
 // maxRawSources limits the number of cited raw sources returned per bundle
