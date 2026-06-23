@@ -41,11 +41,15 @@ type PagePlan struct {
 
 const planSystemPrompt = `You are a knowledge-base curator. Given a list of source-note summaries, identify opportunities to synthesize higher-level wiki pages following the Karpathy LLM Wiki structure.
 
+LANGUAGE RULE: Write title, slug, and description in the SAME language as the majority of source-notes.
+If most source-notes are Chinese, output Chinese title and description. Use pinyin-style kebab slug only for Chinese titles.
+Example: title "RAG召回率优化方法论" → slug "rag-zhao-hui-lv-you-hua-fang-fa-lun" or abbreviated "rag-recall-optimization-methodology".
+
 Output a JSON array. Each element must have:
   type:        "concept" | "comparison" | "decision"
-  title:       concise page title
+  title:       concise page title (in source language, usually Chinese)
   slug:        kebab-case filename (no extension)
-  description: one sentence describing the page's value
+  description: one sentence describing the page's value (in source language)
   sources:     list of source-note paths used
 
 Page type rules:
@@ -115,6 +119,9 @@ func buildGeneratePrompt(kbRoot, pageType string) string {
 	}
 	return fmt.Sprintf(`You are a knowledge-base curator. Generate a wiki %s page in Markdown with YAML frontmatter.
 
+LANGUAGE RULE: Write ALL content (title, description, body) in the SAME language as the source-notes.
+If source-notes are Chinese, output Chinese. Do NOT switch to English unless the source material is English.
+
 Output MUST be valid Markdown. Do NOT wrap output in code fences.
 Begin directly with the YAML frontmatter (---).
 
@@ -125,6 +132,9 @@ Use this template as the exact structure:
 
 func defaultGeneratePrompt(pageType string) string {
 	return fmt.Sprintf(`You are a knowledge-base curator. Generate a wiki %s page in Markdown with YAML frontmatter.
+
+LANGUAGE RULE: Write ALL content (title, description, body) in the SAME language as the source-notes.
+If source-notes are Chinese, output Chinese. Do NOT switch to English unless the source material is English.
 
 Output MUST be valid Markdown with YAML frontmatter. Do NOT wrap output in code fences.
 The frontmatter must include: type, title, description, tags, sources, timestamp.
