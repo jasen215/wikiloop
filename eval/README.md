@@ -98,6 +98,17 @@ python3 eval/eval_wikiloop.py
 
 **结论：向量搜索在 CP/CR/Hit Rate/MRR 全面领先，应保留。**
 
+## 2026-06-23 全量重蒸馏后评估（含 ALIAS+ENTITY+LANGUAGE RULE + authority + doc_type）
+
+| 版本 | AR | CP | CR | Hit Rate | MRR |
+|---|---|---|---|---|---|
+| 有向量 | 0.992 | 0.481 | 0.508 | 0.667 | 0.514 |
+| 无向量 | 0.942 | 0.391 | 0.392 | 0.167 | 0.104 |
+
+**CP/Hit Rate 较上次下降原因：** 旧英文标题 synthesized pages 与新中文页面并存，互相干扰排名。
+**向量差距扩大：** Hit Rate 差距 +0.500（上次 +0.416），向量价值更加确定。
+**待改进：** 清理旧英文 synthesized pages，重新触发 synthesize 生成中文版本。
+
 **剩余2题未命中的真实原因（不是 expected_page 问题）：**
 - Q2（传统/混合/树结构检索对比）：`comparison-of-rag-retrieval-methods.md` 被 source-note 挤出 top10
 - Q7（长上下文 vs RAG）：向量语义偏差，Agentic RAG 文档语义相似度更高
