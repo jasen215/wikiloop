@@ -11,7 +11,9 @@ WikiLoop vs Naive RAG 评估脚本
   cd <project_root>
   python3 eval/eval_wikiloop.py
 """
-import os, sys, json, re, yaml, requests, glob, random, time
+import os, sys, json, re, yaml, requests, glob, random, time, threading
+
+_llm_lock = threading.Semaphore(2)  # 最多同时2个 LLM 请求
 from pathlib import Path
 
 # ── 读取配置 ──────────────────────────────────────────────────────────────────
@@ -43,10 +45,11 @@ def call_llm(system: str, user: str) -> str:
     }
     for attempt in range(5):
         try:
-            resp = requests.post(
-                f"{LLM_BASE_URL}/v1/messages",
-                headers=headers, json=payload, timeout=120,
-            )
+            with _llm_lock:
+                resp = requests.post(
+                    f"{LLM_BASE_URL}/v1/messages",
+                    headers=headers, json=payload, timeout=120,
+                )
             if resp.status_code == 429:
                 wait = 2 ** attempt * 5  # 5s, 10s, 20s, 40s, 80s
                 print(f"  [429] retry in {wait}s ...", flush=True)
@@ -375,11 +378,13 @@ def main():
         questions = generate_questions(n=5)
     print(f"共 {len(questions)} 个问题\n")
 
-    # 评估 WikiLoop
-    wikiloop_scores = evaluate(questions, "WikiLoop (kb_context)", wikiloop_context)
-
-    # 评估 Naive RAG
-    naive_scores = evaluate(questions, "Naive RAG (BM25 keyword)", naive_rag_context)
+    # 并行评估 WikiLoop 和 Naive RAG
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        f_wikiloop = executor.submit(evaluate, questions, "WikiLoop (kb_context)", wikiloop_context)
+        f_naive    = executor.submit(evaluate, questions, "Naive RAG (BM25 keyword)", naive_rag_context)
+        wikiloop_scores = f_wikiloop.result()
+        naive_scores    = f_naive.result()
 
     # 输出对比结果
     print("\n" + "="*60)
