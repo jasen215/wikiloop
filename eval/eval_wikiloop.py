@@ -12,8 +12,9 @@ WikiLoop vs Naive RAG 评估脚本
   python3 eval/eval_wikiloop.py
 """
 import os, sys, json, re, yaml, requests, glob, random, time, threading
+from concurrent.futures import ThreadPoolExecutor
 
-_llm_lock = threading.Semaphore(2)  # 最多同时2个 LLM 请求
+_llm_lock = threading.Semaphore(5)  # 最多同时5个 LLM 请求
 from pathlib import Path
 
 # ── 读取配置 ──────────────────────────────────────────────────────────────────
@@ -338,13 +339,22 @@ def evaluate(questions: list[dict], system_name: str, context_fn) -> dict:
             contexts = context_fn(question)
             meta = []
 
-        answer = generate_answer(question, contexts)
         print(f"  检索到 {len(contexts)} 个 context 片段")
 
-        f  = score_faithfulness(answer, contexts)
-        ar = score_answer_relevancy(question, answer)
-        cp = score_context_precision(question, contexts)
-        cr = score_context_recall(question, contexts, ground_truth)
+        # 并行5路：生成答案 + F + AR + CP + CR 同时跑
+        with ThreadPoolExecutor(max_workers=5) as ex:
+            f_ans = ex.submit(generate_answer, question, contexts)
+            f_cp  = ex.submit(score_context_precision, question, contexts)
+            f_cr  = ex.submit(score_context_recall, question, contexts, ground_truth)
+            answer = f_ans.result()
+            cp = f_cp.result()
+            cr = f_cr.result()
+            # F 和 AR 依赖 answer，串行跑
+            f_f  = ex.submit(score_faithfulness, answer, contexts)
+            f_ar = ex.submit(score_answer_relevancy, question, answer)
+            f  = f_f.result()
+            ar = f_ar.result()
+
         hr = score_hit_rate(meta, expected_page) if use_meta else 0
         mrr = score_mrr(meta, expected_page) if use_meta else 0.0
 
@@ -379,7 +389,6 @@ def main():
     print(f"共 {len(questions)} 个问题\n")
 
     # 并行评估 WikiLoop 和 Naive RAG
-    from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=2) as executor:
         f_wikiloop = executor.submit(evaluate, questions, "WikiLoop (kb_context)", wikiloop_context)
         f_naive    = executor.submit(evaluate, questions, "Naive RAG (BM25 keyword)", naive_rag_context)
