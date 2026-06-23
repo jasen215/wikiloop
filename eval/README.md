@@ -146,3 +146,13 @@ python3 eval/eval_wikiloop.py
 **Hit Rate 下降原因：** 评估题集 12 道题的 expected_page 全部是 concept/comparison/decision 聚合页，其中 sources=1 的单篇页被移入 draft 导致命中失败。这是题集设计问题，不是 draft 机制的缺陷——draft 过滤的目标是避免碎片页污染索引，对真实 AI 查询是正向的。
 
 **draft 机制保留**，评估题集后续按实际命中页更新 expected_page。
+
+## v3 题集基准（2026-06-23，expected_page 全部改为 source-note）
+
+| 版本 | AR | CP | CR | Hit Rate | MRR |
+|---|---|---|---|---|---|
+| **有向量·v3题集（新基准）** | **1.000** | **0.536** | **0.567** | **0.583** | **0.165** |
+
+**说明：** 12道题 expected_page 全部改为 source-note，不再依赖 synthesized pages。
+Hit Rate 0.583 是稳定基准，不受 draft/synthesize 状态影响，后续优化以此为对比基准。
+MRR 偏低（0.165）因为 source-note 在多篇同主题文章中排名分散，top1 命中率较低。
