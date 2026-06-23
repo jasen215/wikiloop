@@ -78,8 +78,19 @@ python3 eval/eval_wikiloop.py
 - Hit Rate / MRR：完全一样，向量对精确页面定位无帮助
 - 注意：此为旧文档未重蒸馏的**最坏情况**，全量重蒸馏加入 ALIAS RULE 后差距预计缩小
 
-**方向决策**：向量搜索带来真实 CR 提升，但代价是 1-2GB 内存 + CGO 依赖。
-待全量重蒸馏后再做一次对比，若差距缩小到 <0.05，则可放弃向量搜索。
+**最终决策（2026-06-23）：放弃向量搜索。**
+全量重蒸馏（ALIAS RULE + ENTITY RULE + authority + doc_type）后，有向量 CR=0.433，无向量 CR=0.433，差距为零。
+向量不仅无贡献，Hit Rate 和 AR 无向量反而更高——向量把高 vec_score 的无关 source-note 顶上来，把真正相关的 comparison/decision 页挤出了结果集。
+下一步：执行 15.3，删除 chromem-go + daulet/tokenizers，解决内存和 Windows CGO 问题。
+
+## v2 问题集最终结果（2026-06-23，全量重蒸馏后）
+
+| 版本 | AR | CP | CR | Hit Rate | MRR |
+|---|---|---|---|---|---|
+| 有向量（修复 multiKindFTS + expected_page）| 0.904 | 0.569 | 0.433 | 0.000 | 0.000 |
+| **无向量（FTS only，同上修复）** | **0.988** | **0.492** | **0.433** | **0.250** | **0.041** |
+
+**结论：CR 完全持平，AR/Hit Rate 无向量更优，确认放弃向量搜索。**
 
 ## 问题集说明
 
