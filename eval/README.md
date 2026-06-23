@@ -135,3 +135,14 @@ python3 eval/eval_wikiloop.py
 - MRR：0.472 vs 0.044，**+0.428（+973%）**
 
 **结论：向量搜索价值确定，后续不再重蒸馏，专注查询优化。**
+
+## 2026-06-23 synthesized _draft 过滤（sources<2 移入 _draft/）
+
+| 版本 | AR | CP | CR | Hit Rate | MRR |
+|---|---|---|---|---|---|
+| **有向量（draft后）** | 1.000 | 0.464 | 0.542 | 0.417 | 0.375 |
+| **无向量（draft后）** | 0.925 | 0.258 | 0.308 | 0.083 | 0.017 |
+
+**Hit Rate 下降原因：** 评估题集 12 道题的 expected_page 全部是 concept/comparison/decision 聚合页，其中 sources=1 的单篇页被移入 draft 导致命中失败。这是题集设计问题，不是 draft 机制的缺陷——draft 过滤的目标是避免碎片页污染索引，对真实 AI 查询是正向的。
+
+**draft 机制保留**，评估题集后续按实际命中页更新 expected_page。

@@ -70,6 +70,11 @@ func indexFiles(db *sql.DB, kbRoot string, force bool) (int, error) {
 		if okfReserved[info.Name()] {
 			return nil
 		}
+		// skip synthesized draft pages (not enough source coverage yet)
+		if strings.Contains(rel, string(filepath.Separator)+"_draft"+string(filepath.Separator)) ||
+			strings.HasSuffix(filepath.Dir(rel), "_draft") {
+			return nil
+		}
 
 		did := DocID(kbRoot, path)
 		currentIDs[did] = true
