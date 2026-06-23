@@ -345,6 +345,13 @@ func HybridRank(ftsResults, vecResults []SearchResult, boostMap map[string]float
 				}
 			}
 		}
+		// Synthesized page boost: concept/comparison/decision pages are distilled
+		// knowledge summaries — they should rank above raw source-notes when present.
+		// This counteracts vector search inflating source-note scores via vec_score.
+		switch r.Kind {
+		case "concept", "comparison", "decision":
+			rrfScore += 1.0 / (rrfK + 1) * 0.8 // ~80% of a top-1 contribution
+		}
 		// Authority boost: each extra point above baseline (3) adds ~0.005 to score.
 		// authority=5 gets +0.010, authority=4 gets +0.005, authority=1/2 gets penalty.
 		if r.Authority > 0 {

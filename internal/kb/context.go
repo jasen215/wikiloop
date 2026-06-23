@@ -47,8 +47,54 @@ func BuildContext(db *sql.DB, kbRoot string, question string, embedder Embedder,
 	wikiLayer := "wiki"
 	wikiResults, _, _, _ := Search(db, kbRoot, question, &wikiLayer, limit*2, embedder)
 
-	// 2. Compress: remove low-score results and near-duplicate descriptions.
-	wikiResults = compressResults(wikiResults, limit)
+	// 1b. Guarantee synthesized pages (concept/comparison/decision) are considered.
+	// Vector search can inflate source-note scores and push synthesized pages out
+	// of the result set. Run a dedicated FTS search per synthesized kind and merge.
+	seenIDs := make(map[string]bool)
+	for _, r := range wikiResults {
+		seenIDs[r.ID] = true
+	}
+	for _, kind := range []string{"concept", "comparison", "decision"} {
+		k := kind
+		extra, _ := FTSSearchFiltered(db, question, &wikiLayer, &k, limit)
+		for _, r := range extra {
+			if !seenIDs[r.ID] {
+				seenIDs[r.ID] = true
+				// Set a baseline HybridScore so compressResults doesn't filter it out.
+				// Use minHybridScoreSynthesized so it passes the synthesized threshold.
+				if r.HybridScore == 0 {
+					r.HybridScore = minHybridScoreSynthesized
+				}
+				wikiResults = append(wikiResults, r)
+			}
+		}
+	}
+
+	// 2. Separate synthesized pages (always kept) from source-notes (compressed).
+	// Synthesized pages are distilled knowledge; they must not be crowded out by
+	// high-volume source-notes even when vector scores inflate source-note rankings.
+	var synthesized, others []SearchResult
+	for _, r := range wikiResults {
+		if isSynthesizedKind(r.Kind) {
+			synthesized = append(synthesized, r)
+		} else {
+			others = append(others, r)
+		}
+	}
+	// Compress only source-notes; keep top synthesized pages (up to limit/2).
+	maxSynth := limit / 2
+	if maxSynth < 1 {
+		maxSynth = 1
+	}
+	if len(synthesized) > maxSynth {
+		synthesized = synthesized[:maxSynth]
+	}
+	othersLimit := limit - len(synthesized)
+	if othersLimit < 1 {
+		othersLimit = 1
+	}
+	others = compressResults(others, othersLimit)
+	wikiResults = append(synthesized, others...)
 	bundle.WikiPages = wikiResults
 
 	if len(wikiResults) == 0 {
