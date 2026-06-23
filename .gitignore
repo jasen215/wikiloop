@@ -50,3 +50,7 @@ internal/embed/models/
 # WikiLoop generated indexes
 **/index/*.sqlite
 **/index/*.sqlite-*
+
+# Eval results (local only, not part of release)
+eval/results_*.json
+eval/EVAL_LOG.md
