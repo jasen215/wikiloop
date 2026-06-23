@@ -3,11 +3,38 @@
 package mcp
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/jasen215/wikiloop/internal/kb"
 )
+
+// appendQueryLog appends a JSONL entry to wiki/query_log.jsonl for AI behavior analysis.
+// Each line: {"ts":"...","tool":"kb_context|kb_search","query":"..."}
+// Non-fatal: errors are silently ignored to avoid disrupting normal operation.
+func appendQueryLog(kbRoot, tool, query string) {
+	logPath := filepath.Join(kbRoot, "wiki", "query_log.jsonl")
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	ts := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+	// Escape double quotes in query
+	escaped := ""
+	for _, c := range query {
+		if c == '"' {
+			escaped += `\"`
+		} else if c == '\n' {
+			escaped += `\n`
+		} else {
+			escaped += string(c)
+		}
+	}
+	fmt.Fprintf(f, "{\"ts\":%q,\"tool\":%q,\"query\":%q}\n", ts, tool, query)
+}
 
 // handleKBStatus returns document and embedding counts plus index file size.
 func handleKBStatus(kbRoot string) map[string]interface{} {
@@ -47,6 +74,7 @@ func handleKBStatus(kbRoot string) map[string]interface{} {
 // handleKBSearch runs FTS (+ optional vector) search and returns results.
 // noVec=true skips vector search even when an embedder is available.
 func handleKBSearch(kbRoot, query string, layer, kind *string, limit int, noVec bool, embedder kb.Embedder) map[string]interface{} {
+	appendQueryLog(kbRoot, "kb_search", query)
 	db, err := kb.OpenDB(kbRoot)
 	if err != nil {
 		return map[string]interface{}{"error": err.Error()}
@@ -71,6 +99,7 @@ func handleKBSearch(kbRoot, query string, layer, kind *string, limit int, noVec 
 
 // handleKBContext builds a context bundle for the given question.
 func handleKBContext(kbRoot, question string, limit int, noVec bool, embedder kb.Embedder) map[string]interface{} {
+	appendQueryLog(kbRoot, "kb_context", question)
 	db, err := kb.OpenDB(kbRoot)
 	if err != nil {
 		return map[string]interface{}{"error": err.Error()}
