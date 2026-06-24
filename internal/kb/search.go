@@ -396,8 +396,7 @@ func multiKindFTS(db *sql.DB, query string, layer, kind *string, limit int) ([]S
 
 func strPtr(s string) *string { return &s }
 
-// Search runs FTS + optional vector hybrid search with graph expansion.
-// If embedder != nil and a vec store exists, also runs VecSearch and merges via HybridRank.
+// Search performs hybrid FTS search over the documents table.
 // Always performs GraphExpand and ConflictLinks on the result set.
 func Search(db *sql.DB, kbRoot string, query string, layer *string, limit int, embedder Embedder) ([]SearchResult, []GraphNeighbor, []Conflict, error) {
 	return SearchFiltered(db, kbRoot, query, layer, nil, limit, embedder)

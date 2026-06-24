@@ -417,7 +417,7 @@ func catchUpFn(kbRoot string, since time.Time, cfg *config.Config) {
 }
 
 // reindexFn is the callback used by the file watcher.
-// Order: convert → index → distill → post-distill reindex → embed.
+// Order: convert → index → distill → post-distill reindex.
 func reindexFn(kbRoot string) {
 	// 1. Convert non-md files (docx, pdf, etc.) to markdown.
 	if n, _ := convert.Run(kbRoot); n > 0 {
@@ -439,7 +439,7 @@ func reindexFn(kbRoot string) {
 		log.Printf("watcher reindex: %d files updated", n)
 	}
 
-	// Load config; use a zero-value config on failure so embed step still runs.
+	// Load config; use a zero-value config on failure.
 	cfg, err := config.Load(kbRoot)
 	if err != nil {
 		log.Printf("watcher: load config: %v", err)
@@ -580,9 +580,6 @@ func runContext(kbRoot string, args []string) error {
 
 	return nil
 }
-
-// ── embed ──────────────────────────────────────────────────────────────────────
-// runEmbed is defined in embed_enabled.go (!windows) or embed_disabled.go (windows).
 
 // ── index ──────────────────────────────────────────────────────────────────────
 
