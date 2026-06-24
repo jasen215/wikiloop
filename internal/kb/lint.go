@@ -84,7 +84,8 @@ func Lint(kbRoot string) ([]LintWarning, error) {
 }
 
 // isFMFieldAbsent reports whether a frontmatter value is missing or empty.
-// Treats nil, empty string, and empty list as absent.
+// Treats nil and empty string as absent. An explicit empty list (sources: [])
+// is considered present — it means "no sources" rather than "field missing".
 func isFMFieldAbsent(v interface{}) bool {
 	switch val := v.(type) {
 	case nil:
@@ -92,7 +93,8 @@ func isFMFieldAbsent(v interface{}) bool {
 	case string:
 		return strings.TrimSpace(val) == ""
 	case []string:
-		return len(val) == 0
+		_ = val
+		return false // explicit empty list is present
 	default:
 		return false
 	}
