@@ -307,19 +307,6 @@ func buildFTSAndQuery(keywords []string) string {
 // k=60 is the standard value from the original RRF paper (Cormack et al., 2009).
 const rrfK = 60.0
 
-// biEncoderRerank truncates results to limit.
-// embedder parameter is kept for interface compatibility; nil always uses truncation path.
-func biEncoderRerank(query string, results []SearchResult, embedder Embedder, limit int) []SearchResult {
-	if len(results) == 0 {
-		return results
-	}
-	if limit > 0 && len(results) > limit {
-		return results[:limit]
-	}
-	return results
-}
-
-
 // multiKindFTS runs FTS queries for each wiki kind in parallel and merges via RRF.
 // This gives each kind (source-note, concept, comparison, decision) an equal chance
 // to surface top results, preventing high-volume kinds from drowning out others.
@@ -514,8 +501,9 @@ func SearchFiltered(db *sql.DB, kbRoot string, query string, layer, kind *string
 		return nil, nil, nil, err
 	}
 	results := applyGraphBoost(db, ftsResults)
-	// biEncoderRerank with nil embedder just truncates to limit
-	results = biEncoderRerank(query, results, nil, limit)
+	if len(results) > limit {
+		results = results[:limit]
+	}
 	ids := make([]string, len(results))
 	for i, r := range results {
 		ids[i] = r.ID

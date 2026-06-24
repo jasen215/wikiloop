@@ -5,8 +5,6 @@ package distill
 import (
 	"fmt"
 	"strings"
-
-	"github.com/jasen215/wikiloop/internal/kb"
 )
 
 type relatedNote struct {
@@ -17,7 +15,7 @@ type relatedNote struct {
 
 // findRelatedNotes previously queried the vector index for related content.
 // Vector search has been removed; this always returns "" until Task 2 adds FTS-based lookup.
-func findRelatedNotes(kbRoot, content string, embedder kb.Embedder) string {
+func findRelatedNotes() string {
 	return ""
 }
 

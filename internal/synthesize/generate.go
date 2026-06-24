@@ -298,7 +298,7 @@ func resolveDestPath(kbRoot string, p PagePlan) (dest string, isDraft bool) {
 func graduateFromDraft(kbRoot string, p PagePlan, draftPath string) error {
 	data, err := os.ReadFile(draftPath)
 	if err != nil {
-		return nil
+		return err
 	}
 	if extractSourceCount(data) < draftThreshold {
 		return nil // not ready yet

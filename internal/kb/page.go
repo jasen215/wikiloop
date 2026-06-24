@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"unicode/utf8"
 )
 
 const pageMaxChars = 5000
@@ -82,7 +83,12 @@ func FetchPages(db *sql.DB, kbRoot string, ids []string, full bool) ([]PageResul
 		truncated := false
 
 		if !applyFull && len(content) > pageMaxChars {
-			content = content[:pageMaxChars]
+			// Truncate at a rune boundary to avoid splitting multi-byte UTF-8 chars.
+			i := pageMaxChars
+			for i > 0 && !utf8.RuneStart(content[i]) {
+				i--
+			}
+			content = content[:i]
 			truncated = true
 		}
 

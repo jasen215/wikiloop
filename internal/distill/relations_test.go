@@ -7,18 +7,11 @@ import (
 	"testing"
 )
 
-// mockEmbedder returns a fixed vector for any text.
-type mockEmbedder struct{}
-
-func (m mockEmbedder) Encode(text string) ([]float32, error) {
-	return []float32{0.1, 0.2, 0.3}, nil
-}
-
 func TestFindRelatedNotes_NoVecIndex(t *testing.T) {
-	// When there is no vec index, findRelatedNotes should return empty string.
-	result := findRelatedNotes("/nonexistent-kb", "some content", mockEmbedder{})
+	// findRelatedNotes always returns "" until FTS-based lookup is implemented.
+	result := findRelatedNotes()
 	if result != "" {
-		t.Errorf("expected empty string for missing KB, got %q", result)
+		t.Errorf("expected empty string, got %q", result)
 	}
 }
 

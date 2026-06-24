@@ -432,7 +432,7 @@ func DistillFile(config Config, rawPath, kbRoot string, embedder kb.Embedder) er
 		generated = lightweightNote(rawPath, rawDocID, string(rawContent))
 		fmt.Printf("  [lightweight] %s\n", filepath.Base(rawPath))
 	} else {
-		relatedContext := findRelatedNotes(kbRoot, string(rawContent), embedder)
+		relatedContext := findRelatedNotes()
 		generated, err = CallLLM(config, kbRoot, string(rawContent), relatedContext)
 		if err != nil {
 			return fmt.Errorf("call LLM: %w", err)

@@ -22,17 +22,6 @@ func appendQueryLog(kbRoot, tool, query string) {
 	}
 	defer f.Close()
 	ts := time.Now().UTC().Format("2006-01-02T15:04:05Z")
-	// Escape double quotes in query
-	escaped := ""
-	for _, c := range query {
-		if c == '"' {
-			escaped += `\"`
-		} else if c == '\n' {
-			escaped += `\n`
-		} else {
-			escaped += string(c)
-		}
-	}
 	fmt.Fprintf(f, "{\"ts\":%q,\"tool\":%q,\"query\":%q}\n", ts, tool, query)
 }
 
