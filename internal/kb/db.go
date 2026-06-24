@@ -51,6 +51,7 @@ func migrateDescription(db *sql.DB) error {
 
 	hasDescription := false
 	hasAuthority := false
+	hasDocTimestamp := false
 	for rows.Next() {
 		var cid int
 		var name, ctype string
@@ -66,6 +67,9 @@ func migrateDescription(db *sql.DB) error {
 		if name == "authority" {
 			hasAuthority = true
 		}
+		if name == "doc_timestamp" {
+			hasDocTimestamp = true
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return err
@@ -77,6 +81,11 @@ func migrateDescription(db *sql.DB) error {
 	}
 	if !hasAuthority {
 		if _, err := db.Exec("ALTER TABLE documents ADD COLUMN authority INTEGER NOT NULL DEFAULT 3"); err != nil {
+			return err
+		}
+	}
+	if !hasDocTimestamp {
+		if _, err := db.Exec("ALTER TABLE documents ADD COLUMN doc_timestamp INTEGER NOT NULL DEFAULT 0"); err != nil {
 			return err
 		}
 	}

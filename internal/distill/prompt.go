@@ -110,6 +110,10 @@ ALIAS RULE (MANDATORY): In every key_claim, inline ALL known aliases, abbreviati
   GOOD: "FTS（Full-Text Search，全文检索，BM25算法）检索性能优于向量搜索（Vector Search）在精确术语匹配场景"
 This is critical for search: users may query with any variant of a term.
 
+SYNONYMS RULE (MANDATORY): The FIRST key_claim MUST be a dedicated synonyms index listing ALL core terms from this document with their aliases, abbreviations, and cross-language equivalents. Format: "核心术语索引：[term1]（alias1，alias2，English equivalent），[term2]（...）..."
+  Example: "核心术语索引：混合检索（Hybrid Search，混合查询，BM25+向量），倒数排名融合（RRF，Reciprocal Rank Fusion），召回率（Recall，Context Recall，CR）"
+This synonym index ensures every query variant can find this document via FTS.
+
 ENTITY RULE (MANDATORY): Mark named entities inline using 【entity|type】 format. Types: 人物|组织|产品|技术|概念|项目|地点
   GOOD: "【Karpathy|人物】提出的【LLM Wiki|概念】采用三层架构，由【Anthropic|组织】等团队验证"
   GOOD: "【bge-small-zh|产品】（【BAAI|组织】出品）在【WikiLoop|项目】中用于向量嵌入，维度512"

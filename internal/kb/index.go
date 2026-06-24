@@ -140,16 +140,25 @@ func upsertDocument(db *sql.DB, kbRoot, path, did string, force bool) (bool, err
 	now := time.Now().Unix()
 	rel, _ := filepath.Rel(kbRoot, path)
 
+	// Fallback to file mtime when frontmatter has no timestamp.
+	docTs := parsed.DocTimestamp
+	if docTs == 0 {
+		if fi, err := os.Stat(path); err == nil {
+			docTs = fi.ModTime().Unix()
+		}
+	}
+
 	_, err = db.Exec(`
-		INSERT INTO documents (id, path, layer, kind, title, description, content, content_hash, source_uri, updated_at, authority)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO documents (id, path, layer, kind, title, description, content, content_hash, source_uri, updated_at, authority, doc_timestamp)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			path=excluded.path, layer=excluded.layer, kind=excluded.kind,
 			title=excluded.title, description=excluded.description, content=excluded.content,
 			content_hash=excluded.content_hash, source_uri=excluded.source_uri,
-			updated_at=excluded.updated_at, authority=excluded.authority
+			updated_at=excluded.updated_at, authority=excluded.authority,
+			doc_timestamp=excluded.doc_timestamp
 	`, did, filepath.ToSlash(rel), layer, parsed.Kind, title, parsed.Description,
-		text, h, nil, now, parsed.Authority)
+		text, h, nil, now, parsed.Authority, docTs)
 	if err != nil {
 		return false, err
 	}
