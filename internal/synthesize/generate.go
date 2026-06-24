@@ -320,8 +320,6 @@ func AppendOrCreate(cfg Config, kbRoot string, p PagePlan) error {
 		return nil
 	}
 	dest, isDraft := resolveDestPath(kbRoot, p)
-	_ = isDraft // used only for path resolution
-
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return err
 	}
@@ -329,15 +327,24 @@ func AppendOrCreate(cfg Config, kbRoot string, p PagePlan) error {
 	if _, err := os.Stat(dest); err == nil {
 		existing, readErr := os.ReadFile(dest)
 		if readErr == nil && extractSourceCount(existing)+len(p.Sources) >= 5 {
-			return rewritePage(cfg, kbRoot, dest, p)
+			if err := rewritePage(cfg, kbRoot, dest, p); err != nil {
+				return err
+			}
+			// graduate after rewrite too
+			if isDraft {
+				if err := graduateFromDraft(kbRoot, p, dest); err != nil {
+					return err
+				}
+			}
+			return nil
 		}
-		err := appendToPage(cfg, kbRoot, dest, p)
-		if err != nil {
+		if err := appendToPage(cfg, kbRoot, dest, p); err != nil {
 			return err
 		}
-		// After append, check if draft page should graduate to formal.
-		if _, stillDraft := resolveDestPath(kbRoot, p); stillDraft {
-			_ = graduateFromDraft(kbRoot, p, dest)
+		if isDraft {
+			if err := graduateFromDraft(kbRoot, p, dest); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
