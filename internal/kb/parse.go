@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	fmRe = regexp.MustCompile(`(?s)^---\n(.*?)\n---\n`)
+	fmRe = regexp.MustCompile(`(?s)^---\n(.*?)\n---\n?`)
 	wlRe = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
 )
 
@@ -130,13 +130,28 @@ func parseYAMLSimple(text string) map[string]interface{} {
 			}
 			idx := strings.Index(trimmed, ":")
 			key := strings.TrimSpace(trimmed[:idx])
-			val := strings.TrimSpace(trimmed[idx+1:])
-			val = strings.Trim(val, `"'`)
+			rawVal := strings.TrimSpace(trimmed[idx+1:])
+			val := strings.Trim(rawVal, `"'`)
 
-			if val == "" || val == "[]" {
+			// Quoted empty string ("" or '') is a scalar empty value, not a list.
+			isQuotedEmpty := (rawVal == `""` || rawVal == `''`)
+
+			if val == "[]" {
+				// Explicit empty list.
 				currentKey = key
 				currentList = []string{}
 				result[key] = currentList
+			} else if val == "" && !isQuotedEmpty {
+				// No inline value — next lines may be list items.
+				currentKey = key
+				currentList = []string{}
+				result[key] = currentList
+			} else if strings.HasPrefix(rawVal, "[") {
+				// Inline JSON-style list: ["a", "b", ...] — store as string,
+				// do NOT enter list mode so subsequent lines are parsed normally.
+				currentKey = key
+				currentList = nil
+				result[key] = rawVal
 			} else {
 				currentKey = key
 				currentList = nil
