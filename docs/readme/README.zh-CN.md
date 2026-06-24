@@ -1,7 +1,7 @@
 <div align="center">
   <img src="logo.png" width="128" alt="WikiLoop"><br>
   <h1>WikiLoop</h1>
-  <p>面向 Agent 的本地优先 LLM Wiki 知识库</p>
+  <p>面向 Agent 的知识搜索引擎 — 蒸馏原始资料为结构化 Markdown 知识库，通过 MCP 搜索和读取</p>
   <p><a href="../../README.md">English</a></p>
   <p>
     <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
@@ -11,39 +11,84 @@
   </p>
 </div>
 
-WikiLoop 是一个面向 Agent 的 local-first LLM Wiki 知识库。它帮助 Agent 和人类基于本地原始资料，维护有来源、可 review、可版本化的 Markdown 知识层。
+WikiLoop 是面向 Agent 的本地优先知识搜索引擎。它把原始文档蒸馏为结构化、可 review 的 Markdown 知识库，通过两个 MCP 工具——`kb_search` 和 `kb_page`——让 Agent 按自己的节奏搜索和深读。
 
-## 核心思路
+## 设计理念
+
+WikiLoop 基于一个核心观察：**Agent 使用外部知识工具的方式和人用搜索引擎一样**——用不同关键词多次查询，顺着关联链接展开，最终自己综合结论。它们不需要系统打包好的答案，需要的是能自主验证、自主汇总的原始材料。
+
+因此 WikiLoop 的职责不是回答问题，而是确保 Agent 搜索时能找到正确的文档，并能完整读取。
 
 ```text
 wikiloop-kb/
-  raw/      权威来源；保存原始资料和近全文转换稿
-  wiki/     Agent 与人共同维护的结构化 Markdown 知识层
-  schema/   知识库本地规则、模板、引用规则和工作流
-  index/    生成的搜索/索引产物
+  raw/      权威来源；保存原始资料
+  wiki/     结构化 Markdown 知识（source-note、concept、comparison、decision）
+  schema/   知识库本地撰写规范和模板
+  index/    FTS 索引产物和查询日志
 ```
 
-WikiLoop 不是长期记忆系统。用户偏好、项目习惯、跨会话记忆应交给外部 memory provider。WikiLoop 只管理外部知识资料，以及从这些资料派生出的 Wiki 知识层。
+## Agent 如何使用 WikiLoop
+
+Agent 通过两个 MCP 工具与 WikiLoop 交互：
+
+**`kb_search(query, limit?)`** — 用关键词或自然语言搜索。每次返回最多 5 篇 source-note 和 3 篇 concept/comparison/decision 页面。每条结果包含 `related` 字段，列出关联文档供继续导航。用不同关键词多次搜索，从多个角度覆盖话题。
+
+**`kb_page(ids, full?)`** — 按 ID（来自 `kb_search` 结果）获取一篇或多篇页面的完整内容。一次最多传 5 个 ID，或对单篇使用 `full=true` 获取不截断的全文。
+
+推荐的 Agent 工作流：
+
+```text
+kb_search("关键词 A")              → 发现相关文档
+kb_search("关键词 B")              → 换角度再搜一次
+kb_page(["id1", "id2", "id3"])   → 深读最相关的几篇
+Agent 从找到的材料中自己综合结论
+```
+
+Agent 应主动迭代搜索、跟随 `related` 链接、交叉验证、自行得出结论。WikiLoop 不生成答案。
 
 ## WikiLoop vs RAG
 
-传统 RAG 将原始文档直接送入向量存储——知识是隐式的，藏在 embedding 里，人无法审阅。WikiLoop 在中间增加了一个显式的蒸馏步骤：
+传统 RAG 检索上下文后交给 LLM 来回答。WikiLoop 把原始材料交给 Agent，让 Agent 自己推理。
 
 ```text
-RAG:       原始文档 → embed → 向量存储 → LLM 检索
-WikiLoop:  原始文档 → wiki（人/Agent 维护）→ FTS + 图 + embed（可选）
+RAG:       用户提问 → 检索上下文 → LLM 生成答案
+WikiLoop:  Agent 搜索 → Agent 深读 → Agent 自己综合
 ```
 
 | | RAG | WikiLoop |
 |---|---|---|
-| 知识形式 | 隐式（向量） | 显式（Markdown） |
+| 知识形式 | 隐式（向量或切块） | 显式（Markdown，可审计） |
+| Agent 角色 | 被动接收上下文 | 主动搜索和阅读 |
+| 答案来源 | 系统生成 | Agent 自主汇总 |
 | 可审计 | 否 | 是 — git diff、lint、冲突链接 |
-| 冷启动成本 | 低 | 较高（需要 wiki 撰写） |
-| 知识衰减 | 难以发现 | 容易 — lint + 引用检查 |
-| 多跳推理 | 依赖 LLM | 图展开（显式） |
-| Embedding | 必须 | 可选增强 |
+| 多跳推理 | 依赖 LLM | `related` 字段的图展开 |
+| 需要 Embedding | 是 | 否（纯 FTS） |
 
 WikiLoop wiki bundle 遵循 [OKF v0.1](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf) 规范。
+
+## 知识流水线
+
+原始文档经过蒸馏流水线处理后才能被 Agent 搜索到：
+
+**第一步 — 蒸馏（自动）**
+
+把任意 Markdown 文件放入 `raw/`，`wikiloop serve` 的 watcher 会自动完成蒸馏 + 建索引。LLM 把原始资料提取为结构化 source-note，写入 `wiki/source-notes/`，包含：
+- `key_claims`：内嵌同义词和中英文变体（ALIAS RULE）——确保 FTS 能命中所有查询变体
+- `【实体|类型】` 格式的命名实体标注
+- `related_to`、`supports`、`contradicts` 关系链接——驱动搜索结果中的 `related` 字段
+- `authority`（1–5 权威度）和 `doc_type` 元数据
+
+**第二步 — 综合（按需）**
+
+```bash
+wikiloop synthesize --topic "RAG"
+```
+
+当某话题积累了足够的 source-note 后，生成 concept / comparison / decision 综合页。来源不足 2 篇的新页面会进入 `wiki/<type>/_draft/`，积累到阈值后自动晋级到正式目录并加入索引。
+
+**第三步 — 搜索**
+
+Agent 通过 MCP 使用 `kb_search` + `kb_page`。搜索基于纯 FTS（SQLite FTS5 + BM25 打分），不需要向量模型。
 
 ## 安装
 
@@ -55,20 +100,23 @@ WikiLoop wiki bundle 遵循 [OKF v0.1](https://github.com/GoogleCloudPlatform/kn
 | Linux x86_64 | `wikiloop-<version>-linux-amd64.tar.gz` |
 | Linux ARM64 | `wikiloop-<version>-linux-arm64.tar.gz` |
 
-> **Windows** 暂无预编译包。构建依赖 [libtokenizers](https://github.com/daulet/tokenizers)，目前 Rust + CGO 工具链兼容性问题尚未解决。Windows 用户可安装 MinGW-w64 和 Rust 后从源码自行构建。
-
 **macOS：** 打开 DMG，将 WikiLoop 拖入 Applications。App 以 menubar 图标形式运行。
 
 **Linux：**
 ```bash
 tar -xzf wikiloop-<version>-linux-amd64.tar.gz -C /path/to/install/
-# 二进制：/path/to/install/wikiloop
-# 模型：  /path/to/install/models/
+sudo ln -sf /path/to/install/wikiloop /usr/local/bin/wikiloop
 ```
 
 ## 从源码构建
 
-需要 Go 1.25+ 并启用 CGO。
+需要 Go 1.25+，无需 CGO。
+
+```bash
+go build -tags fts5 -o wikiloop ./cmd/wikiloop/
+```
+
+或使用多平台构建脚本：
 
 ```bash
 ./scripts/build.sh [version] [target...]
@@ -77,21 +125,8 @@ tar -xzf wikiloop-<version>-linux-amd64.tar.gz -C /path/to/install/
 | Target | 输出 | 平台 |
 |---|---|---|
 | `darwin-arm64` | `dist/WikiLoop-<version>-darwin-arm64.dmg` | macOS Apple Silicon |
-| `darwin-amd64` | `dist/WikiLoop-<version>-darwin-amd64.dmg` | macOS Intel |
 | `linux-amd64` | `dist/wikiloop-<version>-linux-amd64.tar.gz` | Linux x86_64 |
 | `linux-arm64` | `dist/wikiloop-<version>-linux-arm64.tar.gz` | Linux ARM64 |
-
-```bash
-./scripts/build.sh 1.2.0               # 所有平台
-./scripts/build.sh 1.2.0 linux-amd64   # 单个平台
-```
-
-**依赖：**
-
-- Linux 目标：`brew install FiloSottile/musl-cross/musl-cross`
-- macOS DMG：`brew install create-dmg`（可选，缺失时跳过）
-
-每个 tar.gz 包含二进制和内置的 embedding 模型。DMG 是拖拽安装的 macOS app bundle，带系统托盘支持。
 
 ## 仓库结构
 
@@ -99,11 +134,11 @@ tar -xzf wikiloop-<version>-linux-amd64.tar.gz -C /path/to/install/
 wikiloop/
   cmd/wikiloop/        # 主入口
   internal/
-    kb/                # 索引、FTS、向量搜索
+    kb/                # FTS 索引、搜索、图展开、页面获取
     mcp/               # MCP server（stdio + HTTP）
-    embed/             # ONNX embedding（bge-small-zh）
-    watcher/           # 文件监控，自动触发重建索引
+    watcher/           # 文件监控，自动触发蒸馏 + 建索引
     distill/           # LLM 蒸馏流水线
+    synthesize/        # concept/comparison/decision 页面生成
     convert/           # 原始文件转换
     service/           # 系统服务管理（launchd / systemd）
     webui/             # Web UI
@@ -111,55 +146,28 @@ wikiloop/
     config/            # KB 配置（config.yaml）
   scripts/
     build.sh           # 多平台构建脚本
-    Info.plist         # macOS app bundle 元数据
-    wikiloop.icns      # app 图标
-  docs/
 ```
 
 ## Schema 与模板
 
-`wikiloop init` 会把内置的撰写规范和页面模板（来自 `internal/kbinit/schema/`）复制到 KB 的 `schema/` 目录：
+`wikiloop init` 会把内置的撰写规范和页面模板复制到 KB 的 `schema/` 目录：
 
 - `schema/templates/`：source-note / concept / comparison / decision 页面的 Markdown 模板。
-- `schema/references/`：撰写规范——页面类型、引用规则、冲突规则、目录结构、维护循环。
+- `schema/references/`：撰写规范——页面类型、引用规则、冲突规则、目录结构。
 
-distill/synthesize 的 prompt 会读取这些模板，因此编辑它们即可按 KB 定制生成的 wiki 格式。
-
-## 知识库实例
-
-默认知识库目录名为：
-
-```text
-wikiloop-kb/
-```
-
-这只是约定，用户可以放在任意路径并自定义名称。
-
-最小结构：
-
-```text
-wikiloop-kb/
-  raw/
-  wiki/
-  schema/
-```
-
-完整推荐结构见 `schema/references/kb-directory-structure.md`（由 `wikiloop init` 创建）。
+distill/synthesize 的 prompt 会读取这些模板，编辑它们即可按 KB 定制生成的 wiki 格式。
 
 ## 快速开始
 
 ```bash
 export WIKILOOP_KB=/path/to/your-kb
 
-wikiloop index          # 构建/更新索引
-wikiloop embed          # 生成 embedding（可选）
-wikiloop status         # 索引状态
-wikiloop search "query"
-wikiloop context "question"
-wikiloop lint
+wikiloop init           # 初始化 KB 目录并复制 schema/模板
+wikiloop serve          # 启动服务：MCP + Web UI + 文件监控
+wikiloop index          # 构建/更新 FTS 索引
+wikiloop status         # 索引统计
+wikiloop lint           # 健康检查 wiki 页面
 ```
-
-完整选项：`wikiloop --help`。
 
 ## 命令参考
 
@@ -167,132 +175,85 @@ wikiloop lint
 
 | 命令 | 说明 |
 |---|---|
-| `wikiloop init [--force]` | 初始化 KB 目录并复制内置 schema/模板。`--force` 覆盖已有 schema 文件。 |
+| `wikiloop init [--force]` | 初始化 KB 目录并复制内置 schema/模板。 |
 | `wikiloop serve` | 启动常驻服务：HTTP MCP（`/mcp`）+ Web UI + 文件监控。无子命令时的默认行为。 |
 | `wikiloop index` | 从 `wiki/` 和 `raw/` 的 markdown 构建/更新 FTS 索引。 |
-| `wikiloop embed [--full]` | 为文档生成向量嵌入。`--full` 删除并重建向量存储。需要 ONNX runtime。 |
 | `wikiloop search <query>` | FTS 关键词搜索，输出带路径和摘要的排序结果。 |
-| `wikiloop context <question>` | 为问题构建上下文包（相关页面 + 来源）。 |
-| `wikiloop distill` | （在 `serve`/watcher 内运行）通过 LLM 把 `raw/` 新文件转为 `wiki/source-notes/`。非独立子命令，自动触发。 |
-| `wikiloop synthesize [--topic X] [--full]` | 从 source-notes 生成 concept/comparison/decision 页面。默认增量；`--full` 全量重跑；`--topic` 限定标签/标题匹配。 |
-| `wikiloop synthesize --gaps --topic X` | 对某主题做知识缺口分析，报告写入 `index/gaps/<slug>.md`。 |
+| `wikiloop synthesize [--topic X] [--full]` | 从 source-notes 生成 concept/comparison/decision 页面。 |
+| `wikiloop synthesize --gaps --topic X` | 对某主题做知识缺口分析。 |
 | `wikiloop lint` | 健康检查 wiki 页面：缺失 frontmatter 字段、断裂的来源链接。 |
-| `wikiloop status` | 打印索引统计（文档/嵌入数、索引大小）。 |
+| `wikiloop status` | 打印索引统计（文档数、索引大小）。 |
 | `wikiloop service <install\|uninstall\|start\|stop\|status\|logs>` | 管理系统服务（launchd / systemd）。 |
 
-**LLM 配置**（KB 根目录的 `config.yaml` 的 `distill` 段）是 `distill` 和 `synthesize` 的必要条件。格式见 MCP Server 章节；`api_type` 选择 `openai`（默认）或 `anthropic`。
+**LLM 配置**（KB 根目录的 `config.yaml` 的 `distill` 段）是 `distill` 和 `synthesize` 的必要条件。
 
-### synthesize 工作流：从原始资料到主题汇总
+### synthesize 工作流
 
-典型场景：Agent 收集或生成资料 → 自动蒸馏 → 按主题汇总。
+原始资料来源不限：Agent 抓取的网页、用户放入的文档、调研报告、任意 Markdown 文件。
 
-原始资料来源不限，常见方式包括：
-- Agent 从网页/公众号抓取的文章
-- 用户手动放入的文档（PDF 转换稿、本地笔记）
-- Agent 生成的调研报告或分析文档
-- 任意 markdown 文件
+**第一步：资料进入 KB（自动）**
 
-**1. 资料进入 KB（自动）**
+把 Markdown 放入 `raw/`（按来源分目录，如 `raw/wechat-tech/`、`raw/papers/`），`wikiloop serve` 的 watcher 自动完成蒸馏 + 建索引。
 
-把 markdown 放入 `raw/`（按来源分目录，如 `raw/wechat-tech/`、`raw/papers/`、`raw/reports/`），`wikiloop serve` 的 watcher 会自动完成：
-- `distill`：调 LLM 提取 key_claims、关系字段，生成 `wiki/source-notes/`
-- `index` + `embed`：更新 FTS 和向量索引
-
-**2. 按主题生成汇总（手动，Agent 主动调用）**
+**第二步：按主题生成综合页（按需）**
 
 ```bash
-# 对"芯片产业"主题下所有 source-notes 生成 concept/comparison/decision 页面
+# 对"芯片产业"话题生成 concept/comparison/decision 页面
 wikiloop synthesize --topic "芯片产业"
 
-# 重新全量生成（忽略增量缓存）
+# 全量重跑（忽略增量缓存）
 wikiloop synthesize --topic "芯片产业" --full
 
-# 不指定主题：扫描所有新增/变更的 source-notes 做跨主题合成
+# 不指定主题：处理所有新增/变更的 source-notes
 wikiloop synthesize
 
-# 分析"芯片产业"的知识缺口（哪些方向还缺资料）
+# 知识缺口分析
 wikiloop synthesize --gaps --topic "芯片产业"
 # 输出：index/gaps/zhi-pian-chan-ye.md
 ```
 
-**`--topic` 匹配规则**：按 source-note 的 `title` 或 `tags` 字段做大小写不敏感的子串匹配。
-例如 `--topic "芯片"` 会匹配 title 含"芯片"或 tags 含"芯片"的所有 source-notes。
+`--topic` 按 source-note 的 `title` 或 `tags` 字段做大小写不敏感子串匹配。
 
-**生成内容说明**：
+综合页类型：
 
-| 类型 | 输出目录 | 触发条件 |
+| 类型 | 输出目录 | 来源不足时 |
 |---|---|---|
-| concept | `wiki/concepts/` | ≥3 篇 source-notes 共同提到的概念/方法论 |
-| comparison | `wiki/comparisons/` | ≥2 篇 source-notes 可横向对比的工具/方案 |
-| decision | `wiki/decisions/` | ≥2 篇 source-notes 支撑的技术判断/选型结论 |
-
-**Agent 调用示例**（MCP tool call）：
-
-```
-// 新文章进来后，对"AI Agent 记忆"主题做一次汇总
-kb_search("AI Agent 记忆")          // 先确认有哪些 source-notes
-// 然后触发 synthesize（通过 shell 或 wikiloop serve 的 /api/synthesize 接口）
-wikiloop synthesize --topic "AI Agent 记忆"
-```
+| concept | `wiki/concepts/` | 进入 `_draft/`，积累后自动晋级 |
+| comparison | `wiki/comparisons/` | 同上 |
+| decision | `wiki/decisions/` | 同上 |
 
 ## 自动索引服务
 
-监控 KB 目录变化，自动触发 `index + embed`。支持 macOS (launchd) 和 Linux (systemd)。
+监控 KB 目录变化，自动触发蒸馏 + 建索引。支持 macOS (launchd) 和 Linux (systemd)。
 
 ```bash
-# 安装并启动系统服务
 wikiloop service install --kb /path/to/your-kb
-
-# 查看状态 / 卸载
 wikiloop service status
 wikiloop service uninstall
 ```
 
-日志输出到 `{WIKILOOP_KB}/index/watcher.log`。
+日志：`{WIKILOOP_KB}/index/watcher.log`
 
 ## MCP Server
 
-WikiLoop 通过 MCP 协议对外暴露 KB 工具，支持两种部署场景。
+WikiLoop 通过 MCP 协议对外暴露 KB 工具。
 
-可用 tools：`kb_search`、`kb_context`、`kb_status`、`kb_reindex`、`kb_lint`
+**可用 tools：** `kb_search`、`kb_page`、`kb_status`、`kb_reindex`、`kb_lint`
 
 ---
 
 ### 场景一：本机多 Agent 共享
 
-适合 Claude Code、Cursor 等多个本地 Agent 共享同一 KB 实例。
+推荐使用 HTTP 方式：一个 WikiLoop 进程，所有 Agent 共用。
 
-多 Agent 场景推荐使用 **HTTP 方式**：一个 WikiLoop 进程，所有 Agent 共用，避免 stdio 模式下各 Agent 独立拉起进程导致的索引并发冲突。
-
-**第一步：设置 KB 路径并启动 WikiLoop 服务**
-
-程序默认使用 `~/wikiloop-kb` 作为 KB 目录，也可通过环境变量指定：
+**第一步：启动 WikiLoop**
 
 ```bash
 export WIKILOOP_KB=/path/to/wikiloop-kb
-```
-
-安装完成后，先创建命令行软链：
-
-```bash
-# macOS
-sudo ln -sf /Applications/WikiLoop.app/Contents/MacOS/wikiloop /usr/local/bin/wikiloop
-
-# Linux（解压后的二进制路径）
-sudo ln -sf /path/to/wikiloop /usr/local/bin/wikiloop
-```
-
-启动服务：
-
-```bash
 wikiloop serve
 ```
 
-> macOS 也可直接双击 WikiLoop.app 启动（menubar 图标）。app 启动时会自动读取
-> `~/.zshenv`、`~/.bashrc` 等 shell 配置文件中的 `WIKILOOP_*` 环境变量，
-> 与命令行启动行为一致。
-
-`serve` 启动后同时提供 HTTP MCP（`/mcp`）和 Web UI，端口由 `config.yaml` 的 `server` 段配置（默认 8766）。
+> macOS 也可直接双击 WikiLoop.app 启动（menubar 图标）。App 启动时自动读取 `~/.zshenv`、`~/.bashrc` 等 shell 配置文件中的 `WIKILOOP_*` 环境变量。
 
 **第二步：各 Agent 配置 HTTP MCP**
 
@@ -312,13 +273,13 @@ wikiloop serve
 }
 ```
 
-`x-api-key` 对应 `config.yaml` 中 `server.api_key`，未配置 api_key 时可省略 headers。
+`x-api-key` 对应 `config.yaml` 中 `server.api_key`，未配置时可省略 headers。
 
 ---
 
 ### 场景二：托管 Agent 环境（Hermes / OpenClaw 等）
 
-托管环境的容器无法访问用户本地进程，需要将 WikiLoop 安装在 Agent 所在环境的**持久卷**中，通过 stdio 本地调用。
+托管环境的容器无法访问用户本地进程，需将 WikiLoop 安装在 Agent 所在环境的**持久卷**中，通过 stdio 本地调用。
 
 以阿里云 NAS 挂载的 OpenClaw/Hermes 为例（挂载点 `/root/.openclaw`）：
 
@@ -327,13 +288,9 @@ wikiloop serve
 ```bash
 tar -xzf wikiloop-linux-amd64.tar.gz -C /root/.openclaw/wikiloop/
 chmod +x /root/.openclaw/wikiloop/wikiloop
-
-# 将模型放到 KB 目录下
-mkdir -p /root/.openclaw/wikiloop-kb/models
-cp -r /root/.openclaw/wikiloop/models/* /root/.openclaw/wikiloop-kb/models/
 ```
 
-容器重建后 NAS 重新挂载，二进制和 KB 数据均保留，无需重新安装。
+容器重建后 NAS 重新挂载，二进制和 KB 数据均保留。
 
 **2. MCP 配置：**
 
@@ -363,5 +320,3 @@ mcp_servers:
     env:
       WIKILOOP_KB: /root/.openclaw/wikiloop-kb
 ```
-
-OpenClaw 配置格式同 Hermes，参考各平台文档。
