@@ -206,7 +206,9 @@ All commands accept a global `--kb <path>` flag (defaults to `$WIKILOOP_KB`, the
 
 WikiLoop exposes KB tools via the MCP protocol.
 
-**Available tools:** `kb_search`, `kb_page`, `kb_status`, `kb_reindex`, `kb_lint`
+**Available tools:** `kb_search`, `kb_page`
+
+Admin operations (`status`, `reindex`, `lint`) are available via the Web UI or CLI (`wikiloop status`, `wikiloop index`, `wikiloop lint`).
 
 ---
 

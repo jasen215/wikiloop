@@ -87,16 +87,11 @@ func RegisterRoutes(mux *http.ServeMux, kbRoot string, apiKey ...string) {
 	mux.Handle("/mcp/", handler)
 }
 
-// registerTools adds the four KB tools to s.
+// registerTools adds agent-facing KB tools to s.
+// Admin tools (kb_status, kb_reindex, kb_lint) are intentionally excluded —
+// use the Web UI or CLI instead: wikiloop status / wikiloop index / wikiloop lint
 func registerTools(s *mcpserver.MCPServer, kbRoot string, embedder kb.Embedder) {
-	// kb_status ─────────────────────────────────────────────────────────────
-	statusTool := mcp.NewTool("kb_status",
-		mcp.WithDescription("Report WikiLoop KB index stats (document counts, embedding coverage, index path/size)."),
-	)
-	s.AddTool(statusTool, func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		data := handleKBStatus(kbRoot)
-		return toolResultJSON(data)
-	})
+	// kb_status, kb_reindex, kb_lint removed from MCP — available via Web UI and CLI.
 
 	// kb_search ──────────────────────────────────────────────────────────────
 	searchTool := mcp.NewTool("kb_search",
@@ -153,25 +148,6 @@ func registerTools(s *mcpserver.MCPServer, kbRoot string, embedder kb.Embedder) 
 		return toolResultJSON(data)
 	})
 
-	// kb_reindex ─────────────────────────────────────────────────────────────
-	reindexTool := mcp.NewTool("kb_reindex",
-		mcp.WithDescription("Rebuild the WikiLoop FTS index incrementally after KB files change."),
-		mcp.WithBoolean("full", mcp.Description("Force complete rebuild (default false)")),
-	)
-	s.AddTool(reindexTool, func(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		full := req.GetBool("full", false)
-		data := handleKBReindex(kbRoot, full)
-		return toolResultJSON(data)
-	})
-
-	// kb_lint ──────────────────────────────────────────────────────────────────
-	lintTool := mcp.NewTool("kb_lint",
-		mcp.WithDescription("Health-check wiki pages: report missing required frontmatter fields and broken source links (deterministic, no LLM)."),
-	)
-	s.AddTool(lintTool, func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		data := handleKBLint(kbRoot)
-		return toolResultJSON(data)
-	})
 }
 
 // withAPIKey rejects requests missing a valid x-api-key header.

@@ -321,3 +321,38 @@ func listRawFiles(kbRoot string) ([]FileInfo, error) {
 	}
 	return files, nil
 }
+
+// handleReindex triggers FTS index rebuild. POST /api/reindex?full=true
+func (s *Server) handleReindex(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST required", http.StatusMethodNotAllowed)
+		return
+	}
+	full := r.URL.Query().Get("full") == "true"
+	db, err := kb.OpenDB(s.kbRoot)
+	if err != nil {
+		writeJSON(w, map[string]interface{}{"error": err.Error()})
+		return
+	}
+	defer db.Close()
+	indexFn := kb.IndexFiles
+	if full {
+		indexFn = kb.IndexFilesFull
+	}
+	written, err := indexFn(db, s.kbRoot)
+	if err != nil {
+		writeJSON(w, map[string]interface{}{"error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]interface{}{"ok": true, "written": written})
+}
+
+// handleLint runs health checks over wiki pages. GET /api/lint
+func (s *Server) handleLint(w http.ResponseWriter, r *http.Request) {
+	warnings, err := kb.Lint(s.kbRoot)
+	if err != nil {
+		writeJSON(w, map[string]interface{}{"error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]interface{}{"ok": true, "warnings": warnings, "count": len(warnings)})
+}

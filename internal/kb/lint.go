@@ -41,6 +41,11 @@ func Lint(kbRoot string) ([]LintWarning, error) {
 		if strings.ToLower(filepath.Ext(path)) != ".md" || okfReserved[info.Name()] {
 			return nil
 		}
+		// Skip _draft/ pages — insufficient sources is expected, not a lint error.
+		rel0, _ := filepath.Rel(kbRoot, path)
+		if strings.Contains(filepath.ToSlash(rel0), "/_draft/") {
+			return nil
+		}
 
 		parsed, perr := ParseMarkdownFile(path)
 		if perr != nil {

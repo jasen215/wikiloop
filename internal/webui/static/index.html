@@ -52,6 +52,13 @@
                 <span class="kind-desc" data-i18n="status.decision_desc">技术决策</span>
             </div>
         </div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+            <button id="reindex-btn" onclick="doReindex(false)" data-i18n="status.reindex" style="padding:6px 14px;font-size:12px;background:#f6f8fa;color:#24292f;border:1px solid #d0d7de;border-radius:6px;cursor:pointer">Reindex</button>
+            <button onclick="doReindex(true)" data-i18n="status.reindex_full" style="padding:6px 14px;font-size:12px;background:#f6f8fa;color:#24292f;border:1px solid #d0d7de;border-radius:6px;cursor:pointer">Full Reindex</button>
+            <button onclick="doLint()" data-i18n="status.lint" style="padding:6px 14px;font-size:12px;background:#f6f8fa;color:#24292f;border:1px solid #d0d7de;border-radius:6px;cursor:pointer">Lint</button>
+            <span id="admin-status" style="font-size:12px;color:#555;align-self:center"></span>
+        </div>
+        <div id="lint-results" style="margin-top:8px;font-size:12px;display:none"></div>
         <p id="status-error" class="error" style="display:none"></p>
     </div>
 
@@ -75,6 +82,9 @@ const I18N = {
     "status.title":          "Knowledge Base Status",
     "status.documents":      "Documents",
     "status.index_size":     "Index Size",
+    "status.reindex":        "Reindex",
+    "status.reindex_full":   "Full Reindex",
+    "status.lint":           "Lint",
     "status.raw":            "raw",
     "status.raw_desc":       "Source materials",
     "status.source_note_desc": "Distilled notes",
@@ -95,6 +105,9 @@ const I18N = {
     "status.title":          "知识库状态",
     "status.documents":      "文档总数",
     "status.index_size":     "索引大小",
+    "status.reindex":        "重建索引",
+    "status.reindex_full":   "全量重建",
+    "status.lint":           "健康检查",
     "status.raw":            "raw",
     "status.raw_desc":       "原始资料",
     "status.source_note_desc": "蒸馏摘要",
@@ -197,6 +210,45 @@ function escHtml(s) {
 document.getElementById('search-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') doSearch();
 });
+
+async function doReindex(full) {
+    const status = document.getElementById('admin-status');
+    status.textContent = full ? t('status.reindex_full') + '...' : t('status.reindex') + '...';
+    try {
+        const res = await fetch('/api/reindex?full=' + full, { method: 'POST' });
+        const data = await res.json();
+        if (data.error) { status.style.color = '#cf222e'; status.textContent = data.error; return; }
+        status.style.color = '#1a7f37';
+        status.textContent = '✓ ' + data.written + ' files indexed';
+        loadStatus();
+    } catch(e) {
+        status.style.color = '#cf222e'; status.textContent = 'Failed';
+    }
+}
+
+async function doLint() {
+    const status = document.getElementById('admin-status');
+    const lintEl = document.getElementById('lint-results');
+    status.textContent = t('status.lint') + '...';
+    lintEl.style.display = 'none';
+    try {
+        const res = await fetch('/api/lint');
+        const data = await res.json();
+        if (data.error) { status.style.color = '#cf222e'; status.textContent = data.error; return; }
+        const count = data.count || 0;
+        if (count === 0) {
+            status.style.color = '#1a7f37'; status.textContent = '✓ No issues found';
+        } else {
+            status.style.color = '#cf222e'; status.textContent = count + ' issue(s) found';
+            lintEl.style.display = '';
+            lintEl.innerHTML = (data.warnings || []).map(w =>
+                `<div style="color:#cf222e;margin:2px 0">⚠ ${escHtml(w.path)}: ${escHtml(w.kind)} — ${escHtml(w.detail)}</div>`
+            ).join('');
+        }
+    } catch(e) {
+        status.style.color = '#cf222e'; status.textContent = 'Failed';
+    }
+}
 
 loadStatus();
 </script>
