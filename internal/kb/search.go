@@ -4,9 +4,11 @@ package kb
 
 import (
 	"database/sql"
+	"math"
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -43,6 +45,7 @@ type SearchResult struct {
 	GraphBoost   float64      `json:"graph_boost,omitempty"`
 	Related      []RelatedDoc `json:"related,omitempty"`
 	Conflicts    []string     `json:"conflicts,omitempty"`
+	DocTimestamp int64        `json:"doc_timestamp,omitempty"`
 }
 
 // minTrigramLen is the minimum token length for FTS5 trigram tokenizer.
@@ -173,7 +176,8 @@ SELECT
     snippet(document_fts, 2, '[', ']', '...', 10) AS snippet,
     CASE d.layer WHEN 'wiki' THEN 1.0 ELSE 0.0 END AS wiki_priority,
     COALESCE(d.authority, 3) AS authority,
-    rank AS fts_rank
+    rank AS fts_rank,
+    COALESCE(d.doc_timestamp, 0) AS doc_timestamp
 FROM document_fts
 JOIN documents d ON d.id = document_fts.id
 WHERE document_fts MATCH ?
@@ -213,7 +217,8 @@ SELECT
     '' AS snippet,
     CASE layer WHEN 'wiki' THEN 1.0 ELSE 0.0 END AS wiki_priority,
     COALESCE(authority, 3) AS authority,
-    0.0 AS fts_rank
+    0.0 AS fts_rank,
+    COALESCE(doc_timestamp, 0) AS doc_timestamp
 FROM documents
 WHERE (title LIKE ? OR content LIKE ?)
 ` + layerFilter + kindFilter + `
@@ -236,7 +241,7 @@ func scanResults(db *sql.DB, sqlStr string, args ...interface{}) ([]SearchResult
 		var r SearchResult
 		if err := rows.Scan(
 			&r.ID, &r.Path, &r.Layer, &r.Kind, &r.Title,
-			&r.Description, &r.Snippet, &r.WikiPriority, &r.Authority, &r.FTSRank,
+			&r.Description, &r.Snippet, &r.WikiPriority, &r.Authority, &r.FTSRank, &r.DocTimestamp,
 		); err != nil {
 			return nil, err
 		}
@@ -405,7 +410,17 @@ func SearchLayered(db *sql.DB, kbRoot, query string, layer, kind *string, source
 	}
 	results := applyGraphBoost(db, ftsResults)
 
-	// Apply synthesizedBoost (multiplicative) and authorityBoost.
+	// Decay constants: λ controls half-life.
+	// source-note: λ=0.00126 → ~1.5yr half-life
+	// synthesized (concept/comparison/decision): λ=0.00063 → ~3yr half-life
+	const (
+		decayLambdaNote  = 0.00126
+		decayLambdaSynth = 0.00063
+		decayBaseBonus   = 0.012 // max time bonus ≈ top-2 FTS position
+	)
+	now := time.Now().Unix()
+
+	// Apply synthesizedBoost (multiplicative), authorityBoost, and time decay.
 	for i := range results {
 		score := 1.0 / (rrfK + float64(i+1)) // base FTS rank score
 		if isSynthesizedKind(results[i].Kind) {
@@ -415,6 +430,15 @@ func SearchLayered(db *sql.DB, kbRoot, query string, layer, kind *string, source
 			score += float64(results[i].Authority-3) * 0.005
 		}
 		score += results[i].GraphBoost * 0.01
+		// Time decay: newer docs score higher. Skip if no timestamp (doc_timestamp=0).
+		if results[i].DocTimestamp > 0 {
+			days := float64(now-results[i].DocTimestamp) / 86400.0
+			λ := decayLambdaNote
+			if isSynthesizedKind(results[i].Kind) {
+				λ = decayLambdaSynth
+			}
+			score += decayBaseBonus * math.Exp(-λ*days)
+		}
 		results[i].HybridScore = score
 	}
 

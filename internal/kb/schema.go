@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS documents (
     content_hash TEXT NOT NULL,
     source_uri TEXT,
     updated_at INTEGER NOT NULL,
-    authority INTEGER NOT NULL DEFAULT 3
+    authority INTEGER NOT NULL DEFAULT 3,
+    doc_timestamp INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS links (

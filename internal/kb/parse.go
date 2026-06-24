@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var (
@@ -28,8 +29,9 @@ type ParsedDocument struct {
 	Supports    []string
 	RelatedTo   []string
 	KeyClaims   []string
-	Authority   int // 1-5, default 3
-	RawFM       map[string]interface{}
+	Authority    int   // 1-5, default 3
+	DocTimestamp int64 // Unix timestamp from frontmatter `timestamp` field; 0 if absent
+	RawFM        map[string]interface{}
 }
 
 // ParseMarkdownFile reads a file from disk and parses it.
@@ -72,6 +74,20 @@ func ParseMarkdown(text string) *ParsedDocument {
 	if v, ok := fm["authority"].(string); ok {
 		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= 5 {
 			pd.Authority = n
+		}
+	}
+
+	// Parse doc_timestamp from frontmatter `timestamp` field (ISO 8601).
+	if v, ok := fm["timestamp"].(string); ok && v != "" {
+		for _, layout := range []string{
+			"2006-01-02T15:04:05Z",
+			"2006-01-02T15:04:05-07:00",
+			"2006-01-02",
+		} {
+			if t, err := time.Parse(layout, v); err == nil {
+				pd.DocTimestamp = t.Unix()
+				break
+			}
 		}
 	}
 
