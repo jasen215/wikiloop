@@ -32,9 +32,9 @@ supports: []
 
 - Path: `raw/`
 - Type:
-- Author:
-- Published:
-- Imported:
+- Author: Not provided in source.
+- Published: Not provided in source.
+- Imported:          # set by WikiLoop from the raw file modification date
 
 ## Summary
 
