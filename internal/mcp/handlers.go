@@ -6,27 +6,31 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jasen215/wikiloop/internal/kb"
 )
 
 // appendQueryLog appends a JSONL entry to wiki/query_log.jsonl for AI behavior analysis.
-// Each line: {"ts":"...","tool":"kb_context|kb_search","query":"..."}
+// Each line: {"ts":"...","tool":"kb_search|kb_page|kb_status|kb_reindex|kb_lint","query":"..."}
 // Non-fatal: errors are silently ignored to avoid disrupting normal operation.
 func appendQueryLog(kbRoot, tool, query string) {
-	logPath := filepath.Join(kbRoot, "wiki", "query_log.jsonl")
+	now := time.Now().UTC()
+	date := now.Format("2006-01-02")
+	logPath := filepath.Join(kbRoot, "wiki", "query_log_"+date+".jsonl")
 	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return
 	}
 	defer f.Close()
-	ts := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+	ts := now.Format("2006-01-02T15:04:05Z")
 	fmt.Fprintf(f, "{\"ts\":%q,\"tool\":%q,\"query\":%q}\n", ts, tool, query)
 }
 
 // handleKBStatus returns document and embedding counts plus index file size.
 func handleKBStatus(kbRoot string) map[string]interface{} {
+	appendQueryLog(kbRoot, "kb_status", "")
 	dbPath := filepath.Join(kbRoot, "index", "kb.sqlite")
 
 	db, err := kb.OpenDB(kbRoot)
@@ -116,6 +120,7 @@ func handleKBContext(kbRoot, question string, limit int, noVec bool, embedder kb
 // handleKBReindex walks kbRoot and re-indexes documents.
 // full=true forces re-index of every document; full=false is incremental.
 func handleKBReindex(kbRoot string, full bool) map[string]interface{} {
+	appendQueryLog(kbRoot, "kb_reindex", "")
 	db, err := kb.OpenDB(kbRoot)
 	if err != nil {
 		return map[string]interface{}{"error": err.Error()}
@@ -139,6 +144,7 @@ func handleKBReindex(kbRoot string, full bool) map[string]interface{} {
 
 // handleKBPage fetches full content for one or more wiki pages by ID.
 func handleKBPage(kbRoot string, ids []string, full bool) map[string]interface{} {
+	appendQueryLog(kbRoot, "kb_page", strings.Join(ids, ","))
 	if len(ids) == 0 {
 		return map[string]interface{}{"error": "ids is required"}
 	}
@@ -161,6 +167,7 @@ func handleKBPage(kbRoot string, ids []string, full bool) map[string]interface{}
 // handleKBLint runs deterministic health checks over wiki pages and returns
 // the list of warnings (missing required fields, broken source links).
 func handleKBLint(kbRoot string) map[string]interface{} {
+	appendQueryLog(kbRoot, "kb_lint", "")
 	warnings, err := kb.Lint(kbRoot)
 	if err != nil {
 		return map[string]interface{}{"error": err.Error()}
