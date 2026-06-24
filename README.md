@@ -274,9 +274,11 @@ mcp_servers:
       WIKILOOP_KB: /root/.openclaw/wikiloop-kb
 ```
 
-## Auto-index Service
+## System Service (optional)
 
-Monitors the KB directory for changes and automatically triggers distill + index.
+`wikiloop serve` includes a built-in watcher that automatically monitors the KB directory, triggers distill, and rebuilds the index. No additional setup required.
+
+To make WikiLoop **start on boot and run in the background**, install it as a system service (macOS launchd / Linux systemd):
 
 ```bash
 wikiloop service install --kb /path/to/your-kb

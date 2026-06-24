@@ -222,9 +222,11 @@ wikiloop synthesize --gaps --topic "芯片产业"
 | comparison | `wiki/comparisons/` | 同上 |
 | decision | `wiki/decisions/` | 同上 |
 
-## 自动索引服务
+## 系统服务（可选）
 
-监控 KB 目录变化，自动触发蒸馏 + 建索引。支持 macOS (launchd) 和 Linux (systemd)。
+`wikiloop serve` 启动后内置 watcher 会自动监控 KB 目录变化、触发蒸馏和建索引，无需额外配置。
+
+如果需要让 WikiLoop **开机自启、后台常驻**，可以安装为系统服务（macOS launchd / Linux systemd）：
 
 ```bash
 wikiloop service install --kb /path/to/your-kb
