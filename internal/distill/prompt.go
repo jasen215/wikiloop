@@ -26,7 +26,6 @@ The YAML frontmatter must contain these fields:
        BAD examples: "AI", "技术", "文章", "知识", "方法" — too generic, do NOT use these.
        Minimum 3 tags, all domain-specific.>]
   doc_type: <one of: 技术文章 | 白皮书 | 技术规范 | 项目文档 | 会议纪要 | 分析报告 | 教程 | 开源项目 | 产品文档>
-  authority: <integer 1-5. 5=official doc/paper/project author; 4=reputable org/benchmark; 3=data-backed analysis; 2=secondhand summary; 1=opinion/no data>
   authority: <integer 1-5. 5=official doc/paper/author-written; 4=reputable org tech blog/benchmark; 3=data-backed analysis; 2=secondhand summary/interpretation; 1=opinion/marketing/no data>
   resource: <original URL or citation if present in the document, else "">
   sources: ["__RAW_SOURCE__"]
