@@ -19,6 +19,7 @@ type SettingsRequest struct {
 		BaseURL *string `json:"base_url"`
 		Token   *string `json:"token"`
 		Model   *string `json:"model"`
+		APIType *string `json:"api_type"`
 	} `json:"distill"`
 	Embedding struct {
 		IdleTimeout *string `json:"idle_timeout"`
@@ -274,5 +275,9 @@ func Save(kbRoot string, cfg *Config) error {
 	b.WriteString("\nui:\n")
 	fmt.Fprintf(&b, "  language: %q\n", cfg.UI.Language)
 
-	return os.WriteFile(filepath.Join(kbRoot, "config.yaml"), []byte(b.String()), 0o644)
+	path := filepath.Join(kbRoot, "config.yaml")
+	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o600)
 }

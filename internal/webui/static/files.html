@@ -18,6 +18,15 @@
 </nav>
 <div class="container">
     <div class="card">
+        <h2 data-i18n="files.lark_title">Import Lark / Feishu Wiki</h2>
+        <div style="display:flex;gap:8px">
+            <input id="lark-url" type="url" placeholder="https://example.larkoffice.com/wiki/..." style="flex:1;padding:9px 12px;border:1px solid #d0d7de;border-radius:6px;font-size:14px">
+            <button id="lark-import-btn" data-i18n="files.lark_import" style="padding:9px 18px;background:#0969da;color:#fff;border:0;border-radius:6px;cursor:pointer">Import</button>
+        </div>
+        <p data-i18n="files.lark_hint" style="font-size:12px;color:#6e7781;margin-bottom:0">Embedded Base tables are imported in full and become searchable. Requires a logged-in lark-cli user on this Mac.</p>
+        <div id="lark-import-status" style="margin-top:10px;font-size:13px"></div>
+    </div>
+    <div class="card">
         <h2 data-i18n="files.upload_title">Upload Files</h2>
         <div id="drop-zone" style="border:2px dashed #ccc;border-radius:8px;padding:32px;text-align:center;color:#888;cursor:pointer;margin-bottom:16px;transition:border-color .2s,background .2s">
             <div style="font-size:36px;margin-bottom:8px">📂</div>
@@ -67,6 +76,12 @@ const I18N = {
     "files.uploading":    "Uploading",
     "files.uploaded":     "file(s) uploaded",
     "files.failed":       "failed",
+    "files.lark_title":   "Import Lark / Feishu Wiki",
+    "files.lark_import":  "Import",
+    "files.lark_hint":    "Embedded Base tables are imported in full and become searchable. Requires a logged-in lark-cli user on this Mac.",
+    "files.lark_url":     "Enter a Lark Wiki URL",
+    "files.lark_running": "Importing document and embedded tables...",
+    "files.lark_failed":  "Import failed",
     "error.load_files":   "Failed to load file list",
   },
   zh: {
@@ -85,6 +100,12 @@ const I18N = {
     "files.uploading":    "上传中",
     "files.uploaded":     "个文件已上传",
     "files.failed":       "个失败",
+    "files.lark_title":   "导入飞书 / Lark Wiki",
+    "files.lark_import":  "导入",
+    "files.lark_hint":    "内嵌多维表格会完整导入并支持搜索，需要本机 lark-cli 已登录用户账号。",
+    "files.lark_url":     "请输入飞书 Wiki 地址",
+    "files.lark_running": "正在导入文档和内嵌表格…",
+    "files.lark_failed":  "导入失败",
     "error.load_files":   "无法加载文件列表",
   }
 };
@@ -170,6 +191,37 @@ async function loadFiles() {
         tbody.innerHTML = '';
     }
 }
+
+// ── Lark import ──────────────────────────────────────────────────────────
+document.getElementById('lark-import-btn').addEventListener('click', async () => {
+    const input = document.getElementById('lark-url');
+    const button = document.getElementById('lark-import-btn');
+    const status = document.getElementById('lark-import-status');
+    const url = input.value.trim();
+    if (!url) {
+        status.innerHTML = `<span style="color:#cf222e">${t('files.lark_url')}</span>`;
+        return;
+    }
+    button.disabled = true;
+    status.textContent = t('files.lark_running');
+    try {
+        const res = await fetch('/api/import-lark', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url }),
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || t('files.lark_failed'));
+        const rows = (data.table_rows || []).reduce((sum, n) => sum + n, 0);
+        status.innerHTML = `<span style="color:#1a7f37">✓ Imported ${escHtml(data.document_path)} · ${(data.table_paths || []).length} table(s), ${rows} row(s)</span>`;
+        input.value = '';
+        loadFiles();
+    } catch (e) {
+        status.innerHTML = `<span style="color:#cf222e">${escHtml(e.message || t('files.lark_failed'))}</span>`;
+    } finally {
+        button.disabled = false;
+    }
+});
 
 // ── Upload ────────────────────────────────────────────────────────────────
 const dropZone = document.getElementById('drop-zone');

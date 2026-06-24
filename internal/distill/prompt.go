@@ -17,6 +17,13 @@ ALIAS RULE (MANDATORY): In every Key Facts bullet, inline ALL known aliases, abb
 ENTITY RULE (MANDATORY): Mark named entities using 【entity|type】. Types: 人物|组织|产品|技术|概念|项目|地点
   GOOD: "【Karpathy|人物】提出【LLM Wiki|概念】三层架构"
 
+GROUNDING RULES:
+- Every factual claim must be directly supported by the raw source.
+- Never invent or infer a URL, author, publication date, organization, citation, or timestamp.
+- If provenance metadata is absent, use an empty value in frontmatter and write "Not provided in source." in the Source section.
+- Do not turn guesses into facts. Label interpretations explicitly as interpretations.
+- Quotes must be verbatim excerpts from the raw source.
+
 The YAML frontmatter must contain these fields:
   type: source-note
   title: <concise title derived from the document>
@@ -107,6 +114,13 @@ ENTITY RULE (MANDATORY): Mark named entities inline using 【entity|type】 form
   GOOD: "【Karpathy|人物】提出的【LLM Wiki|概念】采用三层架构，由【Anthropic|组织】等团队验证"
   GOOD: "【bge-small-zh|产品】（【BAAI|组织】出品）在【WikiLoop|项目】中用于向量嵌入，维度512"
 This enables cross-document entity linking and multi-hop retrieval.
+
+GROUNDING RULES:
+- Every factual claim must be directly supported by the raw source.
+- Never invent or infer a URL, author, publication date, organization, citation, or timestamp.
+- If provenance metadata is absent, use an empty value in frontmatter and write "Not provided in source." in the Source section.
+- Do not turn guesses into facts. Label interpretations explicitly as interpretations.
+- Quotes must be verbatim excerpts from the raw source.
 
 For the sources field, output the literal placeholder ["__RAW_SOURCE__"] exactly as shown — the system fills in the real raw-source path.
 

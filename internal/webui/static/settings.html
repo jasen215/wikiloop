@@ -8,12 +8,14 @@
     <style>
         .form-row { display:grid; grid-template-columns:180px 1fr; gap:8px 16px; align-items:center; margin-bottom:12px; }
         .form-row label { font-size:13px; color:#555; text-align:right; }
-        .form-row input, .form-row select { padding:6px 10px; border:1px solid #d0d7de; border-radius:6px; font-size:14px; width:100%; box-sizing:border-box; }
+        .form-row input, .form-row select { padding:6px 10px; border:1px solid #d0d7de; border-radius:6px; font-size:14px; width:100%; box-sizing:border-box; background:#fff; }
         .form-row input:focus, .form-row select:focus { outline:none; border-color:#0969da; box-shadow:0 0 0 2px #dbeafe; }
         .form-section { margin-bottom:24px; }
         .form-section h3 { font-size:14px; font-weight:600; color:#444; margin:0 0 12px; border-bottom:1px solid #eee; padding-bottom:6px; }
         .save-btn { padding:8px 20px; background:#0969da; color:#fff; border:none; border-radius:6px; font-size:14px; cursor:pointer; }
         .save-btn:hover { background:#0757ba; }
+        .preset-btn { padding:6px 12px; background:#f6f8fa; color:#24292f; border:1px solid #d0d7de; border-radius:6px; font-size:13px; cursor:pointer; }
+        .hint { grid-column:2; margin-top:-4px; font-size:12px; color:#6e7781; }
         #save-msg { margin-left:12px; font-size:13px; }
     </style>
 </head>
@@ -29,18 +31,27 @@
         <h2 data-i18n="settings.title">Settings</h2>
         <form id="settings-form">
             <div class="form-section">
-                <h3 data-i18n="settings.distill_section">Distill (LLM)</h3>
+                <h3><span data-i18n="settings.distill_section">Distill (LLM)</span> <button id="deepseek-preset" class="preset-btn" type="button" data-i18n="settings.deepseek_preset">Use DeepSeek</button></h3>
+                <div class="form-row">
+                    <label for="distill-api-type" data-i18n="settings.api_type">API Type</label>
+                    <select id="distill-api-type">
+                        <option value="openai">OpenAI compatible</option>
+                        <option value="anthropic">Anthropic</option>
+                    </select>
+                </div>
                 <div class="form-row">
                     <label for="distill-base-url" data-i18n="settings.api_base_url">API Base URL</label>
-                    <input id="distill-base-url" type="text" placeholder="https://api.openai.com/v1">
+                    <input id="distill-base-url" type="text" placeholder="https://api.deepseek.com">
+                    <div class="hint" data-i18n="settings.base_url_hint">Both provider roots and URLs ending in /v1 are accepted.</div>
                 </div>
                 <div class="form-row">
                     <label for="distill-token" data-i18n="settings.api_token">API Token</label>
                     <input id="distill-token" type="password" placeholder="sk-...">
+                    <div id="token-hint" class="hint">Saved tokens are never returned to the browser. Leave blank to keep the existing token.</div>
                 </div>
                 <div class="form-row">
                     <label for="distill-model" data-i18n="settings.model">Model</label>
-                    <input id="distill-model" type="text" placeholder="gpt-4o-mini">
+                    <input id="distill-model" type="text" placeholder="deepseek-chat">
                 </div>
             </div>
             <div class="form-section">
@@ -83,8 +94,11 @@ async function loadSettings() {
         const data = await res.json();
         if (data.error) { errEl.textContent = data.error; errEl.style.display = ''; return; }
         document.getElementById('distill-base-url').value = data.distill?.base_url || '';
-        document.getElementById('distill-token').value = data.distill?.token || '';
         document.getElementById('distill-model').value = data.distill?.model || '';
+        document.getElementById('distill-api-type').value = data.distill?.api_type || 'openai';
+        if (data.distill?.token_configured) {
+            document.getElementById('distill-token').placeholder = 'Configured — leave blank to keep';
+        }
         document.getElementById('embed-idle-timeout').value = data.embedding?.idle_timeout || '';
         document.getElementById('lang-select').value = data.ui?.language || 'zh';
     } catch(e) {
@@ -96,12 +110,15 @@ document.getElementById('settings-form').addEventListener('submit', async e => {
     e.preventDefault();
     const msg = document.getElementById('save-msg');
     msg.textContent = 'Saving...'; msg.style.color = '#555';
+    const token = document.getElementById('distill-token').value;
+    const distill = {
+        api_type: document.getElementById('distill-api-type').value,
+        base_url: document.getElementById('distill-base-url').value,
+        model: document.getElementById('distill-model').value,
+    };
+    if (token) distill.token = token;
     const payload = {
-        distill: {
-            base_url: document.getElementById('distill-base-url').value,
-            token: document.getElementById('distill-token').value,
-            model: document.getElementById('distill-model').value,
-        },
+        distill,
         embedding: { idle_timeout: document.getElementById('embed-idle-timeout').value },
         ui: { language: document.getElementById('lang-select').value },
     };
@@ -123,6 +140,13 @@ document.getElementById('settings-form').addEventListener('submit', async e => {
     }
 });
 
+document.getElementById('deepseek-preset').addEventListener('click', () => {
+    document.getElementById('distill-api-type').value = 'openai';
+    document.getElementById('distill-base-url').value = 'https://api.deepseek.com';
+    document.getElementById('distill-model').value = 'deepseek-chat';
+    document.getElementById('distill-token').focus();
+});
+
 loadSettings();
 </script>
 
@@ -135,6 +159,9 @@ const I18N = {
     "settings.title":            "Settings",
     "settings.distill_section":  "Distill (LLM)",
     "settings.api_base_url":     "API Base URL",
+    "settings.api_type":         "API Type",
+    "settings.deepseek_preset":  "Use DeepSeek",
+    "settings.base_url_hint":    "Both provider roots and URLs ending in /v1 are accepted.",
     "settings.api_token":        "API Token",
     "settings.model":            "Model",
     "settings.embedding_section":"Embedding",
@@ -151,6 +178,9 @@ const I18N = {
     "settings.title":            "设置",
     "settings.distill_section":  "蒸馏（LLM）",
     "settings.api_base_url":     "API 地址",
+    "settings.api_type":         "API 类型",
+    "settings.deepseek_preset":  "使用 DeepSeek",
+    "settings.base_url_hint":    "支持服务根地址，也支持以 /v1 结尾的地址。",
     "settings.api_token":        "API Token",
     "settings.model":            "模型",
     "settings.embedding_section":"向量嵌入",

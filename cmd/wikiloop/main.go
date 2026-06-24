@@ -4,6 +4,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"html"
@@ -25,9 +26,10 @@ import (
 	"github.com/jasen215/wikiloop/internal/distill"
 	"github.com/jasen215/wikiloop/internal/kb"
 	"github.com/jasen215/wikiloop/internal/kbinit"
-	"github.com/jasen215/wikiloop/internal/synthesize"
+	"github.com/jasen215/wikiloop/internal/larkimport"
 	"github.com/jasen215/wikiloop/internal/mcp"
 	"github.com/jasen215/wikiloop/internal/service"
+	"github.com/jasen215/wikiloop/internal/synthesize"
 	"github.com/jasen215/wikiloop/internal/tray"
 	"github.com/jasen215/wikiloop/internal/watcher"
 	"github.com/jasen215/wikiloop/internal/webui"
@@ -98,14 +100,37 @@ func run() error {
 		return runInit(*kbRoot, args[1:])
 	case "synthesize":
 		return runSynthesize(*kbRoot, args[1:])
+	case "import-lark":
+		return runImportLark(*kbRoot, args[1:])
 	default:
 		return fmt.Errorf("unknown subcommand: %s", sub)
 	}
 }
 
+func runImportLark(kbRoot string, args []string) error {
+	fs := flag.NewFlagSet("import-lark", flag.ContinueOnError)
+	name := fs.String("name", "", "optional stable directory name for the imported document")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return fmt.Errorf("usage: wikiloop import-lark [--name slug] <Lark Wiki URL>")
+	}
+
+	result, err := larkimport.Import(context.Background(), kbRoot, fs.Arg(0), *name, nil)
+	if err != nil {
+		return fmt.Errorf("import Lark document: %w", err)
+	}
+	fmt.Printf("imported document: %s\n", result.DocumentPath)
+	for i, path := range result.TablePaths {
+		fmt.Printf("imported table:   %s (%d rows)\n", path, result.TableRows[i])
+	}
+	return nil
+}
+
 const (
-	runningFile      = "index/.running"
-	lastShutdownFile = "index/.last_shutdown"
+	runningFile       = "index/.running"
+	lastShutdownFile  = "index/.last_shutdown"
 	heartbeatInterval = time.Hour
 )
 
@@ -241,7 +266,6 @@ code{background:#f0f0f2;padding:2px 6px;border-radius:4px;font-size:13px}
 	// right after (the fatal path does os.Exit before the goroutine runs).
 	_ = exec.Command("open", tmp).Run()
 }
-
 
 func runServe(kbRoot string) error {
 	if err := ensureKBDirs(kbRoot); err != nil {
@@ -471,7 +495,6 @@ func reindexFn(kbRoot string) {
 		}
 	}
 }
-
 
 // ── status ─────────────────────────────────────────────────────────────────────
 

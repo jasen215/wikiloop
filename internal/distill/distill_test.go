@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jasen215/wikiloop/internal/distill"
 )
@@ -130,6 +131,73 @@ func TestDistillFile_WritesLogAndSources(t *testing.T) {
 	logStr := string(logBytes)
 	if !strings.Contains(logStr, "] ingest | Widget Overview") {
 		t.Errorf("log.md missing ingest entry with title:\n%s", logStr)
+	}
+}
+
+func TestDistillFile_GroundsFabricatedProvenance(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "raw"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rawPath := filepath.Join(dir, "raw", "announcement.md")
+	raw := `---
+source_url: "https://example.larkoffice.com/wiki/source"
+---
+# Official announcement
+No author or publication date is provided.`
+	if err := os.WriteFile(rawPath, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	imported := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(rawPath, imported, imported); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		note := `---
+type: source-note
+title: Official announcement
+resource: "https://invented.example/report"
+sources: ["wrong"]
+---
+
+## Source
+- Author: Invented Committee
+- Published: July 17, 2025
+- Imported: July 17, 2025
+
+## Summary
+Grounded summary.`
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"content": []map[string]string{{"type": "text", "text": note}},
+		})
+	}))
+	defer srv.Close()
+
+	cfg := distill.Config{BaseURL: srv.URL, Token: "k", Model: "m", APIType: "anthropic"}
+	if err := distill.DistillFile(cfg, rawPath, dir, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	note, err := os.ReadFile(filepath.Join(dir, "wiki", "source-notes", "announcement.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(note)
+	for _, unwanted := range []string{"invented.example", "Invented Committee", "July 17, 2025"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("fabricated provenance %q leaked into note:\n%s", unwanted, got)
+		}
+	}
+	for _, want := range []string{
+		`resource: "https://example.larkoffice.com/wiki/source"`,
+		"- Author: Not provided in source.",
+		"- Published: Not provided in source.",
+		"- Imported: 2026-06-20",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("grounded note missing %q:\n%s", want, got)
+		}
 	}
 }
 
