@@ -246,7 +246,7 @@ WikiLoop 通过 MCP 协议对外暴露 KB 工具。
 
 ### 场景一：本机多 Agent 共享
 
-推荐使用 HTTP 方式：一个 WikiLoop 进程，所有 Agent 共用。
+推荐使用 HTTP 方式：一个 WikiLoop 进程，所有 Agent 共用——Claude Code、Cursor、VS Code（Copilot）、Windsurf、Trae、Codex、Hermes、OpenClaw 等均可接入。
 
 **第一步：启动 WikiLoop**
 

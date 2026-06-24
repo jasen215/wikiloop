@@ -199,7 +199,7 @@ WikiLoop exposes KB tools via the MCP protocol.
 
 ### Scenario 1: Local Multi-Agent Sharing
 
-HTTP mode is recommended: one WikiLoop process shared by all agents.
+HTTP mode is recommended: one WikiLoop process shared by all agents — Claude Code, Cursor, VS Code (Copilot), Windsurf, Trae, Codex, Hermes, OpenClaw, and others.
 
 **Step 1: Start WikiLoop**
 
