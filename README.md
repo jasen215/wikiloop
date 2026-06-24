@@ -236,7 +236,7 @@ Add to `~/.claude.json` under `mcpServers`:
 
 In hosted environments (Hermes, OpenClaw, etc.), install WikiLoop on the persistent volume and invoke via stdio.
 
-Example (Alibaba Cloud NAS-mounted, mount point `/root/.openclaw`):
+Example (NAS-mounted OpenClaw/Hermes, mount point `/root/.openclaw`):
 
 **1. Install to persistent volume (one-time):**
 

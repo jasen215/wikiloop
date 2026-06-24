@@ -283,7 +283,7 @@ wikiloop serve
 
 托管环境的容器无法访问用户本地进程，需将 WikiLoop 安装在 Agent 所在环境的**持久卷**中，通过 stdio 本地调用。
 
-以阿里云 NAS 挂载的 OpenClaw/Hermes 为例（挂载点 `/root/.openclaw`）：
+以 NAS 挂载的 OpenClaw/Hermes 为例（挂载点 `/root/.openclaw`）：
 
 **1. 安装到持久卷（一次性）：**
 
