@@ -253,7 +253,9 @@ wikiloop service uninstall
 
 WikiLoop 通过 MCP 协议对外暴露 KB 工具。
 
-**可用 tools：** `kb_search`、`kb_page`、`kb_status`、`kb_reindex`、`kb_lint`
+**可用 tools：** `kb_search`、`kb_page`
+
+管理操作（状态、重建索引、健康检查）通过 Web UI 或 CLI 执行：`wikiloop status`、`wikiloop index`、`wikiloop lint`。
 
 ---
 

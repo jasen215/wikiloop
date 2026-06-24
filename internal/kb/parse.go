@@ -117,7 +117,7 @@ func parseYAMLSimple(text string) map[string]interface{} {
 	for _, line := range strings.Split(text, "\n") {
 		trimmed := strings.TrimRight(line, " ")
 		if strings.HasPrefix(line, "  - ") || strings.HasPrefix(line, "- ") {
-			item := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(line, "  - "), "- "))
+			item := strings.Trim(strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(line, "  - "), "- ")), `"'`)
 			if currentList != nil {
 				currentList = append(currentList, item)
 			}

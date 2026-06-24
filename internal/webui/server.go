@@ -64,6 +64,8 @@ func (s *Server) Handler() http.Handler {
 
 	// REST API.
 	mux.HandleFunc("/api/status", s.handleStatus)
+	mux.HandleFunc("/api/reindex", s.handleReindex)
+	mux.HandleFunc("/api/lint", s.handleLint)
 	mux.HandleFunc("/api/search", s.handleSearch)
 	mux.HandleFunc("/api/files", s.handleFiles)
 	mux.HandleFunc("/api/upload", s.handleUpload)
