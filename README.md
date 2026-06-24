@@ -101,6 +101,7 @@ Download the latest release:
 | macOS Apple Silicon | `WikiLoop-<version>-darwin-arm64.dmg` |
 | Linux x86_64 | `wikiloop-<version>-linux-amd64.tar.gz` |
 | Linux ARM64 | `wikiloop-<version>-linux-arm64.tar.gz` |
+| Windows x86_64 | `wikiloop-<version>-windows-amd64.zip` |
 
 **macOS:** Open the DMG and drag WikiLoop to Applications. The app runs as a menubar icon.
 

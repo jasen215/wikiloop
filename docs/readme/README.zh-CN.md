@@ -99,6 +99,7 @@ Agent 通过 MCP 使用 `kb_search` + `kb_page`。搜索基于纯 FTS（SQLite F
 | macOS Apple Silicon | `WikiLoop-<version>-darwin-arm64.dmg` |
 | Linux x86_64 | `wikiloop-<version>-linux-amd64.tar.gz` |
 | Linux ARM64 | `wikiloop-<version>-linux-arm64.tar.gz` |
+| Windows x86_64 | `wikiloop-<version>-windows-amd64.zip` |
 
 **macOS：** 打开 DMG，将 WikiLoop 拖入 Applications。App 以 menubar 图标形式运行。
 

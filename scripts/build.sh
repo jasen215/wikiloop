@@ -291,25 +291,9 @@ build_linux() {
 build_windows_amd64() {
     echo "→ building windows-amd64 (zip) ..."
 
-    local lib_suffix="windows-amd64"
-    local libpath
-    libpath="$(pwd)/$LIBDIR/$lib_suffix"
-
-    if [ ! -f "$libpath/libtokenizers.a" ] && [ ! -f "$libpath/libtokenizers.lib" ]; then
-        echo "  ✗ libtokenizers not found in $libpath — skipping windows-amd64"
-        echo "    Build it with: cd /tmp/tokenizers && cargo build --release"
-        return
-    fi
-
     local bin="$OUTDIR/wikiloop.exe"
-    # Use mingw gcc for CGO on Windows (supports GNU ABI used by libtokenizers.a)
-    local cc="x86_64-w64-mingw32-gcc"
-    if ! command -v "$cc" &>/dev/null; then
-        cc="gcc"  # fallback on Windows runners where mingw is on PATH as gcc
-    fi
-    CGO_ENABLED=1 GOOS=windows GOARCH=amd64 \
-        CC="$cc" \
-        CGO_LDFLAGS="-L${libpath}" \
+    # Pure Go build — no CGO, no external dependencies required.
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
         go build -tags fts5 \
         -ldflags "-s -w -X main.Version=${VERSION}" \
         -o "$bin" ./cmd/wikiloop/
@@ -318,13 +302,6 @@ build_windows_amd64() {
     local zipfile="$OUTDIR/wikiloop-${VERSION}-windows-amd64.zip"
     mkdir -p "$staging"
     cp "$bin" "$staging/wikiloop.exe"
-
-    # Bundle onnxruntime.dll if available
-    local ort_dll="$LIBDIR/ort-windows-amd64/onnxruntime.dll"
-    if [ -f "$ort_dll" ]; then
-        cp "$ort_dll" "$staging/onnxruntime.dll"
-        echo "  ✓ bundled onnxruntime.dll"
-    fi
 
     cd "$OUTDIR/.pkg-windows-amd64" && zip -q "../wikiloop-${VERSION}-windows-amd64.zip" * && cd - >/dev/null
     rm -r "$staging" "$bin"
