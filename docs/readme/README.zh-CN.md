@@ -182,6 +182,7 @@ wikiloop lint           # 健康检查 wiki 页面
 | `wikiloop search <query>` | FTS 关键词搜索，输出带路径和摘要的排序结果。 |
 | `wikiloop synthesize [--topic X] [--full]` | 从 source-notes 生成 concept/comparison/decision 页面。 |
 | `wikiloop synthesize --gaps --topic X` | 对某主题做知识缺口分析。 |
+| `wikiloop import-lark <URL>` | 导入飞书/Lark Wiki 页面及内嵌多维表格到 `raw/lark/`。需要已登录的 `lark-cli`。 |
 | `wikiloop lint` | 健康检查 wiki 页面：缺失 frontmatter 字段、断裂的来源链接。 |
 | `wikiloop status` | 打印索引统计（文档数、索引大小）。 |
 | `wikiloop service <install\|uninstall\|start\|stop\|status\|logs>` | 管理系统服务（launchd / systemd）。 |

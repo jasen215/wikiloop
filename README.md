@@ -184,6 +184,7 @@ All commands accept a global `--kb <path>` flag (defaults to `$WIKILOOP_KB`, the
 | `wikiloop search <query>` | FTS keyword search; prints ranked hits with paths and snippets. |
 | `wikiloop synthesize [--topic X] [--full]` | Generate concept/comparison/decision pages from source-notes. |
 | `wikiloop synthesize --gaps --topic X` | Knowledge-gap analysis for a topic. |
+| `wikiloop import-lark <URL>` | Import a Lark/Feishu Wiki page and its embedded tables into `raw/lark/`. Requires a logged-in `lark-cli`. |
 | `wikiloop lint` | Health-check wiki pages: missing frontmatter fields, broken source links. |
 | `wikiloop status` | Print index stats (document counts, index size). |
 | `wikiloop service <install\|uninstall\|start\|stop\|status\|logs>` | Manage the OS service (launchd / systemd). |
