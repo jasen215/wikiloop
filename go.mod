@@ -3,13 +3,10 @@ module github.com/jasen215/wikiloop
 go 1.25.5
 
 require (
-	github.com/daulet/tokenizers v1.27.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/getlantern/systray v1.2.2
 	github.com/mark3labs/mcp-go v0.54.1
 	github.com/mattn/go-sqlite3 v1.14.45
-	github.com/philippgille/chromem-go v0.7.0
-	github.com/yalue/onnxruntime_go v1.31.0
 )
 
 require (
