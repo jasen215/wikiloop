@@ -48,7 +48,7 @@ Agent 应主动迭代搜索、跟随 `related` 链接、交叉验证、自行得
 
 ## WikiLoop vs RAG
 
-传统 RAG 检索上下文后交给 LLM 来回答。WikiLoop 把原始材料交给 Agent，让 Agent 自己推理。
+传统 RAG 检索上下文后交给 LLM 来回答，然后返回给Agent。WikiLoop 把原始材料交给 Agent，让 Agent 自己推理。
 
 ```text
 RAG:       用户提问 → 检索上下文 → LLM 生成答案
