@@ -73,4 +73,14 @@ CREATE TABLE IF NOT EXISTS distill_queue (
     queued_at   INTEGER NOT NULL,
     updated_at  INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS document_tags (
+    doc_id  TEXT NOT NULL,
+    tag     TEXT NOT NULL,
+    source  TEXT NOT NULL DEFAULT 'tag',
+    PRIMARY KEY (doc_id, tag),
+    FOREIGN KEY (doc_id) REFERENCES documents(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_document_tags_tag ON document_tags(tag);
 `

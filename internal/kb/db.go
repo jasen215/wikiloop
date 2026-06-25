@@ -100,6 +100,20 @@ func migrateDescription(db *sql.DB) error {
 )`); err != nil {
 		return err
 	}
+
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS document_tags (
+    doc_id  TEXT NOT NULL,
+    tag     TEXT NOT NULL,
+    source  TEXT NOT NULL DEFAULT 'tag',
+    PRIMARY KEY (doc_id, tag),
+    FOREIGN KEY (doc_id) REFERENCES documents(id)
+)`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_document_tags_tag ON document_tags(tag)`); err != nil {
+		return err
+	}
+
 	return nil
 }
 

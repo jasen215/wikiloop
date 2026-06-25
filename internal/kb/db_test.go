@@ -136,6 +136,23 @@ func TestDistillQueueMigration(t *testing.T) {
 	}
 }
 
+func TestDocumentTagsTableExists(t *testing.T) {
+	dir := t.TempDir()
+	db, err := OpenDB(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	var name string
+	err = db.QueryRow(
+		"SELECT name FROM sqlite_master WHERE type='table' AND name='document_tags'",
+	).Scan(&name)
+	if err != nil || name != "document_tags" {
+		t.Fatalf("document_tags table not found: %v", err)
+	}
+}
+
 func TestContentHash(t *testing.T) {
 	h1 := ContentHash("hello world")
 	h2 := ContentHash("hello world")
