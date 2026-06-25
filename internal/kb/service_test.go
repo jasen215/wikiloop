@@ -125,3 +125,91 @@ func TestKBPageEmptyIDs(t *testing.T) {
 		t.Errorf("expected KBError 400 for empty ids, got %v", err)
 	}
 }
+
+func TestKBAdd(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "wiki"), 0o755)
+	db, _ := OpenDB(dir)
+	db.Close()
+
+	result, err := KBAdd(dir, "references/test.md", "# Test", "", false)
+	if err != nil {
+		t.Fatalf("KBAdd: %v", err)
+	}
+	if result.Path != "raw/references/test.md" {
+		t.Errorf("expected path raw/references/test.md, got %q", result.Path)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "raw", "references", "test.md")); err != nil {
+		t.Error("file not written")
+	}
+}
+
+func TestKBAddPathTraversal(t *testing.T) {
+	dir := t.TempDir()
+	_, err := KBAdd(dir, "../evil.md", "bad", "", false)
+	var kbe *KBError
+	if !errors.As(err, &kbe) || kbe.Code != 400 {
+		t.Errorf("expected KBError 400 for path traversal, got %v", err)
+	}
+}
+
+func TestKBAddFileExists(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "wiki"), 0o755)
+	os.MkdirAll(filepath.Join(dir, "raw"), 0o755)
+	db, _ := OpenDB(dir)
+	db.Close()
+	os.WriteFile(filepath.Join(dir, "raw", "a.md"), []byte("x"), 0o644)
+
+	_, err := KBAdd(dir, "a.md", "y", "", false)
+	var kbe *KBError
+	if !errors.As(err, &kbe) || kbe.Code != 400 {
+		t.Errorf("expected KBError 400 for existing file, got %v", err)
+	}
+}
+
+func TestKBUpload(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "raw"), 0o755)
+	os.MkdirAll(filepath.Join(dir, "wiki"), 0o755)
+	db, _ := OpenDB(dir)
+	db.Close()
+
+	r := strings.NewReader("hello world")
+	if err := KBUpload(dir, "doc.txt", r); err != nil {
+		t.Fatalf("KBUpload: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "raw", "doc.txt")); err != nil {
+		t.Error("uploaded file not found")
+	}
+}
+
+func TestKBReindex(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "raw"), 0o755)
+	os.MkdirAll(filepath.Join(dir, "wiki"), 0o755)
+	db, _ := OpenDB(dir)
+	db.Close()
+
+	result, err := KBReindex(dir, false)
+	if err != nil {
+		t.Fatalf("KBReindex: %v", err)
+	}
+	if result.Message == "" {
+		t.Error("expected non-empty message")
+	}
+}
+
+func TestKBLint(t *testing.T) {
+	dir := t.TempDir()
+	result, err := KBLint(dir)
+	if err != nil {
+		t.Fatalf("KBLint: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.Warnings == nil {
+		t.Error("warnings should be non-nil slice")
+	}
+}

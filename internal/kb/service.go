@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -171,4 +172,122 @@ func KBPage(kbRoot string, ids []string, full bool) ([]PageResult, error) {
 		return nil, &KBError{Code: 500, Message: err.Error()}
 	}
 	return pages, nil
+}
+
+// AddResult is returned by KBAdd.
+type AddResult struct {
+	Path       string `json:"path"`
+	Indexed    bool   `json:"indexed"`
+	IndexError string `json:"index_error,omitempty"`
+}
+
+// ReindexResult is returned by KBReindex.
+type ReindexResult struct {
+	Written int    `json:"written"`
+	Message string `json:"message"`
+}
+
+// LintResult is returned by KBLint.
+type LintResult struct {
+	Warnings []LintWarning `json:"warnings"`
+	Count    int           `json:"count"`
+}
+
+// KBAdd writes text content to raw/<filename> and triggers incremental indexing.
+func KBAdd(kbRoot, filename, content, sourceURL string, overwrite bool) (*AddResult, error) {
+	AppendQueryLog(kbRoot, "kb_add", filename)
+	if strings.TrimSpace(filename) == "" {
+		return nil, &KBError{Code: 400, Message: "filename is required"}
+	}
+	if strings.Contains(filepath.ToSlash(filename), "..") {
+		return nil, &KBError{Code: 400, Message: "filename must not contain '..'"}
+	}
+
+	dst := filepath.Join(kbRoot, "raw", filepath.FromSlash(filename))
+	if !overwrite {
+		if _, err := os.Stat(dst); err == nil {
+			return nil, &KBError{Code: 400, Message: "file already exists: raw/" + filename + ", use overwrite=true"}
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return nil, &KBError{Code: 500, Message: "mkdir failed: " + err.Error()}
+	}
+
+	body := content
+	if strings.TrimSpace(sourceURL) != "" {
+		body = "<!-- source: " + sourceURL + " -->\n\n" + content
+	}
+	if err := os.WriteFile(dst, []byte(body), 0o644); err != nil {
+		return nil, &KBError{Code: 500, Message: "write failed: " + err.Error()}
+	}
+
+	db, err := OpenDB(kbRoot)
+	if err != nil {
+		return &AddResult{Path: "raw/" + filename, Indexed: false, IndexError: err.Error()}, nil
+	}
+	defer db.Close()
+	if _, err := IndexFiles(db, kbRoot); err != nil {
+		return &AddResult{Path: "raw/" + filename, Indexed: false, IndexError: err.Error()}, nil
+	}
+	return &AddResult{Path: "raw/" + filename, Indexed: true}, nil
+}
+
+// KBUpload writes binary content from r to raw/<filename> (max 100MB).
+func KBUpload(kbRoot, filename string, r io.Reader) error {
+	AppendQueryLog(kbRoot, "kb_upload", filename)
+	if filename == "" || filename == "." {
+		return &KBError{Code: 400, Message: "invalid filename"}
+	}
+	dst := filepath.Join(kbRoot, "raw", filepath.Base(filename))
+	const maxUploadBytes = 100 << 20
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return &KBError{Code: 500, Message: "create file: " + err.Error()}
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, io.LimitReader(r, maxUploadBytes+1)); err != nil {
+		os.Remove(dst)
+		return &KBError{Code: 500, Message: "write file: " + err.Error()}
+	}
+	if fi, _ := out.Stat(); fi != nil && fi.Size() > maxUploadBytes {
+		out.Close()
+		os.Remove(dst)
+		return &KBError{Code: 400, Message: "file too large (max 100 MB)"}
+	}
+	return nil
+}
+
+// KBReindex walks kbRoot and re-indexes documents.
+func KBReindex(kbRoot string, full bool) (*ReindexResult, error) {
+	AppendQueryLog(kbRoot, "kb_reindex", "")
+	db, err := OpenDB(kbRoot)
+	if err != nil {
+		return nil, &KBError{Code: 500, Message: err.Error()}
+	}
+	defer db.Close()
+
+	indexFn := IndexFiles
+	if full {
+		indexFn = IndexFilesFull
+	}
+	written, err := indexFn(db, kbRoot)
+	if err != nil {
+		return nil, &KBError{Code: 500, Message: err.Error()}
+	}
+	return &ReindexResult{Written: written, Message: "index updated"}, nil
+}
+
+// KBLint runs deterministic health checks over wiki pages.
+func KBLint(kbRoot string) (*LintResult, error) {
+	AppendQueryLog(kbRoot, "kb_lint", "")
+	warnings, err := Lint(kbRoot)
+	if err != nil {
+		return nil, &KBError{Code: 500, Message: err.Error()}
+	}
+	if warnings == nil {
+		warnings = []LintWarning{}
+	}
+	return &LintResult{Warnings: warnings, Count: len(warnings)}, nil
 }
