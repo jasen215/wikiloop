@@ -249,7 +249,7 @@ Add to `~/.claude.json` under `mcpServers`:
 
 ### Scenario 2: Hosted Agent Environments
 
-In hosted environments (Hermes, OpenClaw, etc.), install WikiLoop on the persistent volume and invoke via stdio.
+In hosted environments (Hermes, OpenClaw, etc.), install WikiLoop on the persistent volume and invoke via **stdio** — WikiLoop starts as a subprocess of the agent host, with the watcher running in the background automatically.
 
 Example (NAS-mounted OpenClaw/Hermes, mount point `/root/.openclaw`):
 
@@ -260,7 +260,21 @@ tar -xzf wikiloop-linux-amd64.tar.gz -C /root/.openclaw/wikiloop/
 chmod +x /root/.openclaw/wikiloop/wikiloop
 ```
 
-**2. MCP configuration:**
+**2. Install markitdown (recommended):**
+
+markitdown enables conversion of PDF, Word, Excel, PPT, and HTML files to Markdown before distillation. Without it, only `.md` and `.txt` files are distilled; binary files are indexed by filename only.
+
+```bash
+pip install markitdown
+# verify
+markitdown --version
+```
+
+> Verified working on OpenClaw/Hermes (path: `/root/.openclaw/workspace/bin/markitdown`). Add `workspace/bin` to PATH or set the full path in your environment.
+
+If markitdown is unavailable, agents can extract text themselves (using LLM vision or other tools) and write the result directly to `$WIKILOOP_KB/raw/converted/<slug>.md` — the watcher picks it up automatically.
+
+**3. MCP configuration:**
 
 Claude Code (`~/.claude.json`):
 
@@ -269,9 +283,10 @@ Claude Code (`~/.claude.json`):
   "mcpServers": {
     "wikiloop": {
       "command": "/root/.openclaw/wikiloop/wikiloop",
-      "args": ["serve"],
+      "args": ["stdio"],
       "env": {
-        "WIKILOOP_KB": "/root/.openclaw/wikiloop-kb"
+        "WIKILOOP_KB": "/root/.openclaw/wikiloop-kb",
+        "PATH": "/root/.openclaw/workspace/bin:/usr/local/bin:/usr/bin:/bin"
       }
     }
   }
@@ -284,10 +299,26 @@ Hermes (`mcp_servers` in agent config):
 mcp_servers:
   wikiloop:
     command: /root/.openclaw/wikiloop/wikiloop
-    args: [serve]
+    args: [stdio]
     env:
       WIKILOOP_KB: /root/.openclaw/wikiloop-kb
+      PATH: /root/.openclaw/workspace/bin:/usr/local/bin:/usr/bin:/bin
 ```
+
+The KB directory is created automatically on first launch. No manual `init` needed.
+
+**4. Adding content to the knowledge base:**
+
+Agents with `write_file` access can write directly into the KB — the watcher detects changes and triggers indexing and distillation automatically.
+
+| Content type | Write to |
+|---|---|
+| Articles, notes, references (Markdown/text) | `$WIKILOOP_KB/raw/<your-category>/<slug>.md` |
+| Agent-converted PDF / Word / Excel / EPUB content | `$WIKILOOP_KB/raw/converted/<slug>.md` |
+
+Files in `raw/converted/` are treated as already-converted and go straight to distillation, skipping the markitdown step. All other paths under `raw/` are processed through the full pipeline (convert → index → distill).
+
+Organize subdirectories however makes sense for your content — WikiLoop does not enforce a fixed structure under `raw/`.
 
 ## System Service (optional)
 

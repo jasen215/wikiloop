@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/jasen215/wikiloop/internal/kb"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -62,6 +63,19 @@ func Start(addr, kbRoot, apiKey string) error {
 	mux := http.NewServeMux()
 	RegisterRoutes(mux, kbRoot)
 	return http.ListenAndServe(addr, mux)
+}
+
+// ServeStdio runs an MCP stdio server for hosted agent environments (Hermes,
+// OpenClaw, etc.). Blocks until stdin is closed or the process receives a signal.
+func ServeStdio(kbRoot, apiKey string) error {
+	s := mcpserver.NewMCPServer(
+		"wikiloop",
+		"1.0.0",
+		mcpserver.WithToolCapabilities(false),
+		mcpserver.WithInstructions(serverInstructions),
+	)
+	registerTools(s, kbRoot, nil)
+	return mcpserver.NewStdioServer(s).Listen(context.Background(), os.Stdin, os.Stdout)
 }
 
 // RegisterRoutes adds MCP endpoints to the given mux.
