@@ -194,3 +194,27 @@ func TestHybridRankSynthesizedBoostIsMultiplicative(t *testing.T) {
 		t.Errorf("expected multiplicative ratio ~1.3, got %f", ratio)
 	}
 }
+
+func TestMergeRelated(t *testing.T) {
+	a := []RelatedDoc{
+		{ID: "wiki/a.md", Title: "A", Kind: "source-note"},
+		{ID: "wiki/b.md", Title: "B", Kind: "source-note"},
+	}
+	b := []RelatedDoc{
+		{ID: "wiki/b.md", Title: "B", Kind: "source-note"}, // duplicate
+		{ID: "wiki/c.md", Title: "C", Kind: "source-note"},
+	}
+	merged := mergeRelated(a, b, 8)
+	if len(merged) != 3 {
+		t.Errorf("expected 3 after dedup, got %d: %v", len(merged), merged)
+	}
+	// Cap test
+	many := make([]RelatedDoc, 10)
+	for i := range many {
+		many[i] = RelatedDoc{ID: fmt.Sprintf("wiki/%d.md", i)}
+	}
+	capped := mergeRelated(many, nil, 5)
+	if len(capped) != 5 {
+		t.Errorf("expected cap at 5, got %d", len(capped))
+	}
+}
