@@ -7,7 +7,7 @@
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
     <a href="https://github.com/jasen215/wikiloop/releases"><img src="https://img.shields.io/github/v/release/jasen215/wikiloop" alt="Release"></a>
     <img src="https://img.shields.io/badge/go-1.25+-00ADD8.svg" alt="Go Version">
-    <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-blue" alt="Platform">
+    <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue" alt="Platform">
   </p>
 </div>
 
@@ -121,6 +121,8 @@ Download the latest release:
 tar -xzf wikiloop-<version>-linux-amd64.tar.gz -C /path/to/install/
 sudo ln -sf /path/to/install/wikiloop /usr/local/bin/wikiloop
 ```
+
+**Windows:** Extract the zip and run `wikiloop.exe serve` (or `wikiloop.exe stdio` for MCP). Add the directory to `PATH` for convenience. No CGO required — pure Go binary.
 
 ## Building from Source
 
