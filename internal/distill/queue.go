@@ -75,24 +75,17 @@ func MarkDone(db *sql.DB, path string) error {
 	return err
 }
 
-// MarkFailed increments retry_count. If retry_count < 5, resets to pending for retry.
+// MarkFailed increments retry_count atomically. If retry_count < 5, resets to pending for retry.
 // At retry_count >= 5, sets permanent failed status.
 func MarkFailed(db *sql.DB, path, errMsg string) error {
-	var retryCount int
-	db.QueryRow("SELECT retry_count FROM distill_queue WHERE path=?", path).Scan(&retryCount) //nolint:errcheck
-	retryCount++
 	now := time.Now().Unix()
-	if retryCount >= 5 {
-		_, err := db.Exec(
-			`UPDATE distill_queue SET status='failed', retry_count=?, last_error=?, updated_at=? WHERE path=?`,
-			retryCount, errMsg, now, path,
-		)
-		return err
-	}
-	_, err := db.Exec(
-		`UPDATE distill_queue SET status='pending', retry_count=?, last_error=?, updated_at=? WHERE path=?`,
-		retryCount, errMsg, now, path,
-	)
+	_, err := db.Exec(`
+		UPDATE distill_queue
+		SET retry_count = retry_count + 1,
+		    status      = CASE WHEN retry_count + 1 >= 5 THEN 'failed' ELSE 'pending' END,
+		    last_error  = ?,
+		    updated_at  = ?
+		WHERE path = ?`, errMsg, now, path)
 	return err
 }
 

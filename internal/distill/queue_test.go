@@ -134,14 +134,14 @@ func TestRecoverStale(t *testing.T) {
 	rawDir := filepath.Join(kbRoot, "raw")
 	os.WriteFile(filepath.Join(rawDir, "a.md"), []byte("# a"), 0o644)
 	Enqueue(db, kbRoot)
-	NextPending(db) // 变为 processing（模拟崩溃残留）
+	path, _ := NextPending(db) // 变为 processing（模拟崩溃残留）
 
 	if err := RecoverStale(db); err != nil {
 		t.Fatal(err)
 	}
 	var status string
-	db.QueryRow("SELECT status FROM distill_queue WHERE status='processing'").Scan(&status)
-	if status == "processing" {
-		t.Error("expected stale processing to be reset to pending")
+	db.QueryRow("SELECT status FROM distill_queue WHERE path=?", path).Scan(&status)
+	if status != "pending" {
+		t.Errorf("expected status=pending after RecoverStale, got %q", status)
 	}
 }
