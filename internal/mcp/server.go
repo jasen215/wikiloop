@@ -38,9 +38,12 @@ HOW TO USE:
      kb_search results. Pass multiple IDs (up to 5) to scan several at once,
      or use full=true with a single ID to get complete untruncated text.
   4. kb_add(filename, content, source_url?) — Add new content to the knowledge
-     base. Use 'references/<slug>.md' for articles and notes, or
-     'converted/<slug>.md' for content you extracted from PDF/Word/Excel.
-     Indexing is synchronous; distillation runs in the background.
+     base. filename is relative to raw/ — organize with any subdirectory
+     structure that fits your content (e.g. 'references/<slug>.md',
+     'converted/<slug>.md', 'wechat/<channel>/<slug>.md'). Use 'converted/'
+     for content you extracted from PDF/Word/Excel/EPUB so the watcher skips
+     the conversion step. Indexing is synchronous; distillation runs in the
+     background.
 
 QUERY EXPANSION (mandatory):
   Before searching, expand the query into aliases, abbreviations, and
@@ -156,7 +159,7 @@ func registerTools(s *mcpserver.MCPServer, kbRoot string, embedder kb.Embedder) 
 	// kb_add ──────────────────────────────────────────────────────────────────
 	addTool := mcp.NewTool("kb_add",
 		mcp.WithDescription("Add a text document to the knowledge base. Writes content to raw/<filename> and triggers incremental indexing. Distillation runs asynchronously in the background."),
-		mcp.WithString("filename", mcp.Required(), mcp.Description("Path relative to raw/, e.g. 'references/article.md' or 'converted/report.md'")),
+		mcp.WithString("filename", mcp.Required(), mcp.Description("Path relative to raw/. Use any subdirectory structure (e.g. 'references/article.md', 'converted/report.md', 'wechat/channel/post.md'). Use 'converted/' prefix for agent-extracted PDF/Word/Excel/EPUB content.")),
 		mcp.WithString("content", mcp.Required(), mcp.Description("File content (Markdown or plain text)")),
 		mcp.WithString("source_url", mcp.Description("Original source URL, written as a comment at the top of the file")),
 		mcp.WithBoolean("overwrite", mcp.Description("Overwrite if file already exists (default false)")),
