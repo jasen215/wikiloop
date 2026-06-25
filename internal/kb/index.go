@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 var textExtensions = map[string]bool{".md": true, ".txt": true, ".rst": true}
@@ -164,6 +166,7 @@ func upsertDocument(db *sql.DB, kbRoot, path, did string, force bool) (bool, err
 	}
 
 	upsertLinks(db, did, parsed)
+	upsertDocumentTags(db, did, text, parsed.Tags)
 	return true, nil
 }
 
@@ -192,6 +195,39 @@ func upsertLinks(db *sql.DB, docID string, parsed *ParsedDocument) {
 			db.Exec("INSERT OR IGNORE INTO links (source_doc_id, target_doc_id, relation, confidence) VALUES (?, ?, ?, ?)",
 				docID, target, rel.key, 1.0)
 		}
+	}
+}
+
+// knownTypes is the set of entity type words used in 【name|type】 notation.
+// Entities whose name matches a type word are noise (e.g. 【技术|库】) and skipped.
+var knownTypes = map[string]bool{
+	"技术": true, "概念": true, "组织": true, "人物": true,
+	"产品": true, "项目": true, "地点": true,
+}
+
+// entityRe matches 【name|type】 inline entity annotations.
+var entityRe = regexp.MustCompile(`【([^|】]+)\|([^】]+)】`)
+
+// upsertDocumentTags replaces all document_tags for docID with tags from two sources:
+//   - frontmatter tags (source='tag')
+//   - inline 【name|type】 entity annotations extracted from content (source='entity')
+func upsertDocumentTags(db *sql.DB, docID, content string, tags []string) {
+	db.Exec("DELETE FROM document_tags WHERE doc_id = ?", docID) //nolint:errcheck
+
+	for _, t := range tags {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+		db.Exec("INSERT OR IGNORE INTO document_tags (doc_id, tag, source) VALUES (?, ?, 'tag')", docID, t) //nolint:errcheck
+	}
+
+	for _, m := range entityRe.FindAllStringSubmatch(content, -1) {
+		name := strings.TrimSpace(m[1])
+		if name == "" || utf8.RuneCountInString(name) < 2 || knownTypes[name] {
+			continue
+		}
+		db.Exec("INSERT OR IGNORE INTO document_tags (doc_id, tag, source) VALUES (?, ?, 'entity')", docID, name) //nolint:errcheck
 	}
 }
 
@@ -227,6 +263,7 @@ func purgeStale(db *sql.DB, kbRoot string, currentIDs map[string]bool) (int, err
 	ph := strings.Join(placeholders, ",")
 
 	db.Exec(fmt.Sprintf("DELETE FROM embeddings WHERE doc_id IN (%s)", ph), args...)
+	db.Exec(fmt.Sprintf("DELETE FROM document_tags WHERE doc_id IN (%s)", ph), args...) //nolint:errcheck
 	db.Exec(fmt.Sprintf("DELETE FROM links WHERE source_doc_id IN (%s) OR target_doc_id IN (%s)", ph, ph), append(args, args...)...)
 	db.Exec(fmt.Sprintf("DELETE FROM documents WHERE id IN (%s)", ph), args...)
 
