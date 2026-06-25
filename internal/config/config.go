@@ -60,6 +60,11 @@ type DistillConfig struct {
 	Workers int    // concurrent distill workers (default 3)
 }
 
+// IsConfigured returns true when all three LLM fields are non-empty.
+func (c DistillConfig) IsConfigured() bool {
+	return c.BaseURL != "" && c.Token != "" && c.Model != ""
+}
+
 type EmbeddingConfig struct {
 	IdleTimeout time.Duration
 }
