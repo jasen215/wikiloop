@@ -4,54 +4,36 @@ package webui
 
 import (
 	"encoding/json"
-	"io"
+	"errors"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jasen215/wikiloop/internal/config"
-	"github.com/jasen215/wikiloop/internal/distill"
 	"github.com/jasen215/wikiloop/internal/kb"
 )
 
+// kbErrToHTTP writes the appropriate HTTP status code and JSON error body.
+func kbErrToHTTP(w http.ResponseWriter, err error) {
+	code := http.StatusInternalServerError
+	var e *kb.KBError
+	if errors.As(err, &e) {
+		code = e.Code
+	}
+	w.WriteHeader(code)
+	writeJSON(w, map[string]interface{}{"error": err.Error()})
+}
+
 // handleStatus returns document/embedding counts, by-layer breakdown, and index file size.
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
-	dbPath := filepath.Join(s.kbRoot, "index", "kb.sqlite")
-
-	db, err := kb.OpenDB(s.kbRoot)
+	result, err := kb.KBStatus(s.kbRoot)
 	if err != nil {
-		writeJSON(w, map[string]interface{}{
-			"documents":     0,
-			"by_layer":      map[string]int{},
-			"embeddings":    0,
-			"index_path":    dbPath,
-			"index_size_kb": int64(0),
-			"distill_queue": map[string]int{},
-		})
+		kbErrToHTTP(w, err)
 		return
 	}
-	defer db.Close()
-
-	byLayer, total, _ := kb.LayerCounts(db)
-	byKind, _ := kb.KindCounts(db)
-	queueStats, _ := distill.Stats(db)
-
-	var indexSize int64
-	if fi, err := os.Stat(dbPath); err == nil {
-		indexSize = fi.Size()
-	}
-
-	writeJSON(w, map[string]interface{}{
-		"documents":     total,
-		"by_layer":      byLayer,
-		"by_kind":       byKind,
-		"index_path":    dbPath,
-		"index_size":    indexSize,
-		"distill_queue": queueStats,
-	})
+	writeJSON(w, result)
 }
 
 // handleSearch runs layered FTS search and returns results with related docs.
@@ -63,14 +45,12 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]interface{}{"results": []kb.SearchResult{}})
 		return
 	}
-
 	limit := 10
 	if l := r.URL.Query().Get("limit"); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n > 0 {
 			limit = n
 		}
 	}
-
 	var layer *string
 	if l := r.URL.Query().Get("layer"); l != "" {
 		layer = &l
@@ -79,48 +59,24 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	if k := r.URL.Query().Get("kind"); k != "" {
 		kind = &k
 	}
-
 	sourceLimit := limit
-	if sourceLimit <= 0 {
-		sourceLimit = 5
-	}
 	synthLimit := min(3, sourceLimit/2)
 	if synthLimit < 1 {
 		synthLimit = 1
 	}
-
-	db, err := kb.OpenDB(s.kbRoot)
+	resp, err := kb.KBSearch(s.kbRoot, q, layer, kind, sourceLimit, synthLimit)
 	if err != nil {
-		writeJSON(w, map[string]interface{}{"error": err.Error()})
+		kbErrToHTTP(w, err)
 		return
 	}
-	defer db.Close()
-
-	results, conflicts, err := kb.SearchLayered(db, s.kbRoot, q, layer, kind, sourceLimit, synthLimit)
-	if err != nil {
-		writeJSON(w, map[string]interface{}{"error": err.Error()})
-		return
-	}
-
-	writeJSON(w, map[string]interface{}{
-		"results":   results,
-		"conflicts": conflicts,
-	})
-}
-
-// FileInfo describes a single file in the raw/ directory.
-type FileInfo struct {
-	Name    string `json:"name"`
-	Path    string `json:"path"` // relative path from raw/ (e.g. "ebooks/Chip/xxx.md")
-	Size    int64  `json:"size"`
-	ModTime int64  `json:"mod_time"` // Unix timestamp
+	writeJSON(w, resp)
 }
 
 // handleFiles lists files in the raw/ subdirectory of kbRoot.
 func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
-	files, err := listRawFiles(s.kbRoot)
+	files, err := kb.KBListFiles(s.kbRoot)
 	if err != nil {
-		writeJSON(w, map[string]interface{}{"error": err.Error()})
+		kbErrToHTTP(w, err)
 		return
 	}
 	writeJSON(w, map[string]interface{}{"files": files})
@@ -133,48 +89,22 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		writeJSON(w, map[string]interface{}{"error": "parse form: " + err.Error()})
+		kbErrToHTTP(w, &kb.KBError{Code: 400, Message: "parse form: " + err.Error()})
 		return
 	}
-
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		writeJSON(w, map[string]interface{}{"error": "read file field: " + err.Error()})
+		kbErrToHTTP(w, &kb.KBError{Code: 400, Message: "read file field: " + err.Error()})
 		return
 	}
 	defer file.Close()
 
-	filename := filepath.Base(header.Filename)
-	if filename == "" || filename == "." {
-		writeJSON(w, map[string]interface{}{"error": "invalid filename"})
+	if err := kb.KBUpload(s.kbRoot, header.Filename, file); err != nil {
+		kbErrToHTTP(w, err)
 		return
 	}
-
-	dst := filepath.Join(s.kbRoot, "raw", filename)
-	const maxUploadBytes = 100 << 20 // 100 MB
-
-	out, err := os.Create(dst)
-	if err != nil {
-		writeJSON(w, map[string]interface{}{"error": "create file: " + err.Error()})
-		return
-	}
-	defer out.Close()
-
-	if _, err := io.Copy(out, io.LimitReader(file, maxUploadBytes+1)); err != nil {
-		os.Remove(dst)
-		writeJSON(w, map[string]interface{}{"error": "write file: " + err.Error()})
-		return
-	}
-	if fi, _ := out.Stat(); fi != nil && fi.Size() > maxUploadBytes {
-		out.Close()
-		os.Remove(dst)
-		http.Error(w, "file too large (max 100 MB)", http.StatusRequestEntityTooLarge)
-		return
-	}
-
-	writeJSON(w, map[string]interface{}{"ok": true, "filename": filename})
+	writeJSON(w, map[string]interface{}{"ok": true, "filename": filepath.Base(header.Filename)})
 }
 
 // handleImportLark imports a Lark/Feishu Wiki URL and expands embedded Base
@@ -291,54 +221,6 @@ func writeJSON(w http.ResponseWriter, v interface{}) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// listRawFiles returns FileInfo for each regular file under kbRoot/raw/,
-// recursively, skipping hidden files and the converted/ directory.
-// Returns an empty slice (not an error) when the directory doesn't exist.
-func listRawFiles(kbRoot string) ([]FileInfo, error) {
-	rawDir := filepath.Join(kbRoot, "raw")
-	if _, err := os.Stat(rawDir); os.IsNotExist(err) {
-		return []FileInfo{}, nil
-	}
-
-	var files []FileInfo
-	err := filepath.Walk(rawDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		name := info.Name()
-
-		// Skip hidden files and directories.
-		if strings.HasPrefix(name, ".") {
-			if info.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-
-		// Skip the converted/ directory (generated output).
-		if info.IsDir() && name == "converted" && filepath.Dir(path) == rawDir {
-			return filepath.SkipDir
-		}
-
-		if info.IsDir() {
-			return nil
-		}
-
-		rel, _ := filepath.Rel(rawDir, path)
-		files = append(files, FileInfo{
-			Name:    name,
-			Path:    rel,
-			Size:    info.Size(),
-			ModTime: info.ModTime().Unix(),
-		})
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return files, nil
-}
-
 // handleReindex triggers FTS index rebuild. POST /api/reindex?full=true
 func (s *Server) handleReindex(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -346,30 +228,20 @@ func (s *Server) handleReindex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	full := r.URL.Query().Get("full") == "true"
-	db, err := kb.OpenDB(s.kbRoot)
+	result, err := kb.KBReindex(s.kbRoot, full)
 	if err != nil {
-		writeJSON(w, map[string]interface{}{"error": err.Error()})
+		kbErrToHTTP(w, err)
 		return
 	}
-	defer db.Close()
-	indexFn := kb.IndexFiles
-	if full {
-		indexFn = kb.IndexFilesFull
-	}
-	written, err := indexFn(db, s.kbRoot)
-	if err != nil {
-		writeJSON(w, map[string]interface{}{"error": err.Error()})
-		return
-	}
-	writeJSON(w, map[string]interface{}{"ok": true, "written": written})
+	writeJSON(w, map[string]interface{}{"ok": true, "written": result.Written})
 }
 
 // handleLint runs health checks over wiki pages. GET /api/lint
 func (s *Server) handleLint(w http.ResponseWriter, r *http.Request) {
-	warnings, err := kb.Lint(s.kbRoot)
+	result, err := kb.KBLint(s.kbRoot)
 	if err != nil {
-		writeJSON(w, map[string]interface{}{"error": err.Error()})
+		kbErrToHTTP(w, err)
 		return
 	}
-	writeJSON(w, map[string]interface{}{"ok": true, "warnings": warnings, "count": len(warnings)})
+	writeJSON(w, map[string]interface{}{"ok": true, "warnings": result.Warnings, "count": result.Count})
 }
