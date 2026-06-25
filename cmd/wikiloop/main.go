@@ -102,6 +102,8 @@ func run() error {
 		return runSynthesize(*kbRoot, args[1:])
 	case "import-lark":
 		return runImportLark(*kbRoot, args[1:])
+	case "stdio":
+		return runStdio(*kbRoot)
 	default:
 		return fmt.Errorf("unknown subcommand: %s", sub)
 	}
@@ -269,6 +271,56 @@ code{background:#f0f0f2;padding:2px 6px;border-radius:4px;font-size:13px}
 	// returns immediately. A goroutine would be killed if the caller exits
 	// right after (the fatal path does os.Exit before the goroutine runs).
 	_ = exec.Command("open", tmp).Run()
+}
+
+// runStdio starts WikiLoop in stdio MCP mode for hosted agent environments
+// (Hermes, OpenClaw, etc.). It starts the watcher and catch-up scan in
+// background goroutines, then serves MCP over stdin/stdout. No HTTP server
+// or system tray is started, so multiple instances can coexist without port
+// conflicts.
+func runStdio(kbRoot string) error {
+	if err := ensureKBDirs(kbRoot); err != nil {
+		return fmt.Errorf("ensure KB dirs: %w", err)
+	}
+
+	cfg, err := config.Load(kbRoot)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	since := lastKnownTime(kbRoot)
+	writeTimestamp(filepath.Join(kbRoot, runningFile))
+	_ = os.Remove(filepath.Join(kbRoot, lastShutdownFile))
+
+	go func() {
+		t := time.NewTicker(heartbeatInterval)
+		defer t.Stop()
+		for range t.C {
+			writeTimestamp(filepath.Join(kbRoot, runningFile))
+		}
+	}()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		writeTimestamp(filepath.Join(kbRoot, lastShutdownFile))
+		_ = os.Remove(filepath.Join(kbRoot, runningFile))
+		os.Exit(0)
+	}()
+
+	if !since.IsZero() {
+		go func() { catchUpFn(kbRoot, since, cfg) }()
+	}
+
+	go func() {
+		if err := watcher.Watch(kbRoot, reindexFn); err != nil {
+			log.Printf("watcher: %v", err)
+		}
+	}()
+
+	log.Printf("WikiLoop stdio MCP starting (kb: %s)", kbRoot)
+	return mcp.ServeStdio(kbRoot, cfg.Server.APIKey)
 }
 
 func runServe(kbRoot string) error {
