@@ -211,6 +211,106 @@ LIMIT ?`
 	return result
 }
 
+// TagExpand returns documents related to docIDs via shared keywords (tags or entity names).
+// hops=1 finds documents sharing a tag with the seed set.
+// hops=2 additionally finds documents sharing a tag with hop-1 documents.
+// Results exclude the seed set and are capped at limit.
+func TagExpand(db *sql.DB, docIDs []string, hops int, limit int) []GraphNeighbor {
+	if len(docIDs) == 0 || hops < 1 || limit < 1 {
+		return nil
+	}
+
+	ph := placeholders(len(docIDs))
+	seedArgs := stringsToArgs(docIDs)
+
+	// hop1: documents sharing a tag with seeds, excluding seeds
+	hop1SQL := `
+SELECT DISTINCT dt2.doc_id
+FROM document_tags dt1
+JOIN document_tags dt2 ON dt1.tag = dt2.tag
+WHERE dt1.doc_id IN (` + ph + `)
+  AND dt2.doc_id NOT IN (` + ph + `)`
+
+	hop1Args := append(seedArgs, seedArgs...)
+
+	hop1IDs := queryDocIDs(db, hop1SQL, hop1Args...)
+	if len(hop1IDs) == 0 {
+		return nil
+	}
+
+	candidateIDs := make(map[string]bool, len(hop1IDs))
+	for _, id := range hop1IDs {
+		candidateIDs[id] = true
+	}
+
+	if hops >= 2 {
+		ph1 := placeholders(len(hop1IDs))
+		hop1Args2 := stringsToArgs(hop1IDs)
+		// hop2: documents sharing a tag with hop1, excluding seeds and hop1
+		hop2SQL := `
+SELECT DISTINCT dt4.doc_id
+FROM document_tags dt3
+JOIN document_tags dt4 ON dt3.tag = dt4.tag
+WHERE dt3.doc_id IN (` + ph1 + `)
+  AND dt4.doc_id NOT IN (` + ph + `)
+  AND dt4.doc_id NOT IN (` + ph1 + `)`
+
+		hop2Args := append(hop1Args2, seedArgs...)
+		hop2Args = append(hop2Args, hop1Args2...)
+		hop2IDs := queryDocIDs(db, hop2SQL, hop2Args...)
+		for _, id := range hop2IDs {
+			candidateIDs[id] = true
+		}
+	}
+
+	allIDs := make([]string, 0, len(candidateIDs))
+	for id := range candidateIDs {
+		allIDs = append(allIDs, id)
+	}
+
+	if len(allIDs) == 0 {
+		return nil
+	}
+
+	ph2 := placeholders(len(allIDs))
+	args2 := stringsToArgs(allIDs)
+	detailSQL := `SELECT id, path, layer, COALESCE(kind,''), COALESCE(title,'')
+		FROM documents WHERE id IN (` + ph2 + `) ORDER BY title LIMIT ?`
+	args2 = append(args2, limit)
+
+	rows, err := db.Query(detailSQL, args2...)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var neighbors []GraphNeighbor
+	for rows.Next() {
+		var n GraphNeighbor
+		if err := rows.Scan(&n.ID, &n.Path, &n.Layer, &n.Kind, &n.Title); err == nil {
+			neighbors = append(neighbors, n)
+		}
+	}
+	return neighbors
+}
+
+// queryDocIDs executes a query and returns the first column as a string slice.
+func queryDocIDs(db *sql.DB, query string, args ...interface{}) []string {
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err == nil {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
 // placeholders returns a comma-separated string of n "?" placeholders.
 func placeholders(n int) string {
 	if n == 0 {
