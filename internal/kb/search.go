@@ -468,7 +468,7 @@ func SearchLayered(db *sql.DB, kbRoot, query string, layer, kind *string, source
 	combined := append(notes, synth...)
 	for i := range combined {
 		linkRelated := FetchRelated(db, combined[i].ID, 3)
-		tagNeighbors := TagExpand(db, []string{combined[i].ID}, 2, 5)
+		tagNeighbors := TagExpand(db, []string{combined[i].ID}, 1, 5)
 		tagRelated := make([]RelatedDoc, len(tagNeighbors))
 		for j, n := range tagNeighbors {
 			tagRelated[j] = RelatedDoc{ID: n.ID, Title: n.Title, Kind: n.Kind}

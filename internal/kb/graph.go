@@ -214,6 +214,8 @@ LIMIT ?`
 // TagExpand returns documents related to docIDs via shared keywords (tags or entity names).
 // hops=1 finds documents sharing a tag with the seed set.
 // hops=2 additionally finds documents sharing a tag with hop-1 documents.
+// High-frequency tags (appearing in > 5% of documents) are excluded to avoid
+// noise from generic terms like "RAG", "AI", "LLM".
 // Results exclude the seed set and are capped at limit.
 func TagExpand(db *sql.DB, docIDs []string, hops int, limit int) []GraphNeighbor {
 	if len(docIDs) == 0 || hops < 1 || limit < 1 {
@@ -223,13 +225,19 @@ func TagExpand(db *sql.DB, docIDs []string, hops int, limit int) []GraphNeighbor
 	ph := placeholders(len(docIDs))
 	seedArgs := stringsToArgs(docIDs)
 
-	// hop1: documents sharing a tag with seeds, excluding seeds
+	// idfFilter excludes tags appearing in more than 5% of all documents.
+	// This is equivalent to IDF < log(20) ≈ 3.0, filtering generic terms.
+	const idfFilter = `AND (SELECT COUNT(DISTINCT doc_id) FROM document_tags WHERE tag = dt1.tag) * 20
+	  <= (SELECT COUNT(*) FROM documents)`
+
+	// hop1: documents sharing a non-generic tag with seeds, excluding seeds
 	hop1SQL := `
 SELECT DISTINCT dt2.doc_id
 FROM document_tags dt1
 JOIN document_tags dt2 ON dt1.tag = dt2.tag
 WHERE dt1.doc_id IN (` + ph + `)
-  AND dt2.doc_id NOT IN (` + ph + `)`
+  AND dt2.doc_id NOT IN (` + ph + `)
+  ` + idfFilter
 
 	hop1Args := append(seedArgs, seedArgs...)
 
@@ -246,14 +254,16 @@ WHERE dt1.doc_id IN (` + ph + `)
 	if hops >= 2 {
 		ph1 := placeholders(len(hop1IDs))
 		hop1Args2 := stringsToArgs(hop1IDs)
-		// hop2: documents sharing a tag with hop1, excluding seeds and hop1
+		// hop2: documents sharing a non-generic tag with hop1, excluding seeds and hop1
 		hop2SQL := `
 SELECT DISTINCT dt4.doc_id
 FROM document_tags dt3
 JOIN document_tags dt4 ON dt3.tag = dt4.tag
 WHERE dt3.doc_id IN (` + ph1 + `)
   AND dt4.doc_id NOT IN (` + ph + `)
-  AND dt4.doc_id NOT IN (` + ph1 + `)`
+  AND dt4.doc_id NOT IN (` + ph1 + `)
+  AND (SELECT COUNT(DISTINCT doc_id) FROM document_tags WHERE tag = dt3.tag) * 20
+	  <= (SELECT COUNT(*) FROM documents)`
 
 		hop1Copy := stringsToArgs(hop1IDs)
 		hop2Args := append(hop1Args2, seedArgs...)
