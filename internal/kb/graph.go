@@ -255,8 +255,9 @@ WHERE dt3.doc_id IN (` + ph1 + `)
   AND dt4.doc_id NOT IN (` + ph + `)
   AND dt4.doc_id NOT IN (` + ph1 + `)`
 
+		hop1Copy := stringsToArgs(hop1IDs)
 		hop2Args := append(hop1Args2, seedArgs...)
-		hop2Args = append(hop2Args, hop1Args2...)
+		hop2Args = append(hop2Args, hop1Copy...)
 		hop2IDs := queryDocIDs(db, hop2SQL, hop2Args...)
 		for _, id := range hop2IDs {
 			candidateIDs[id] = true
