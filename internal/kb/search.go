@@ -464,10 +464,16 @@ func SearchLayered(db *sql.DB, kbRoot, query string, layer, kind *string, source
 		}
 	}
 
-	// Attach related docs to each result.
+	// Attach related docs to each result (links-based + tag-based multi-hop).
 	combined := append(notes, synth...)
 	for i := range combined {
-		combined[i].Related = FetchRelated(db, combined[i].ID, 3)
+		linkRelated := FetchRelated(db, combined[i].ID, 3)
+		tagNeighbors := TagExpand(db, []string{combined[i].ID}, 2, 5)
+		tagRelated := make([]RelatedDoc, len(tagNeighbors))
+		for j, n := range tagNeighbors {
+			tagRelated[j] = RelatedDoc{ID: n.ID, Title: n.Title, Kind: n.Kind}
+		}
+		combined[i].Related = mergeRelated(linkRelated, tagRelated, 8)
 	}
 
 	// Collect conflict links.
@@ -551,5 +557,20 @@ func applyGraphBoost(db *sql.DB, ftsResults []SearchResult) []SearchResult {
 		ftsResults[i].GraphBoost = boostMap[ftsResults[i].ID]
 	}
 	return ftsResults
+}
+
+// mergeRelated merges two RelatedDoc slices, deduplicating by ID, capped at maxTotal.
+// Items from a take priority over items from b.
+func mergeRelated(a, b []RelatedDoc, maxTotal int) []RelatedDoc {
+	seen := make(map[string]bool, len(a)+len(b))
+	out := make([]RelatedDoc, 0, maxTotal)
+	for _, r := range append(a, b...) {
+		if seen[r.ID] || len(out) >= maxTotal {
+			continue
+		}
+		seen[r.ID] = true
+		out = append(out, r)
+	}
+	return out
 }
 

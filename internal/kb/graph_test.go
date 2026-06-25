@@ -143,3 +143,99 @@ func TestFetchRelated(t *testing.T) {
 		t.Fatalf("expected kind 'concept', got %q", related[0].Kind)
 	}
 }
+
+func setupTagsDB(t *testing.T) (*sql.DB, string) {
+	t.Helper()
+	dir := t.TempDir()
+	db, err := OpenDB(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	// Insert 4 documents
+	for _, row := range []struct{ id, title string }{
+		{"wiki/a.md", "Doc A"},
+		{"wiki/b.md", "Doc B"},
+		{"wiki/c.md", "Doc C"},
+		{"wiki/d.md", "Doc D"},
+	} {
+		db.Exec(`INSERT INTO documents
+			(id,path,layer,kind,title,description,content,content_hash,updated_at,authority,doc_timestamp)
+			VALUES (?,?,?,?,?,?,?,?,1,3,0)`,
+			row.id, row.id, "wiki", "source-note", row.title, "", "content", row.id)
+	}
+
+	// Tags: A-B share "RAG", B-C share "LLM", D has no shared tags
+	insertTag := func(docID, tag, source string) {
+		db.Exec("INSERT OR IGNORE INTO document_tags (doc_id,tag,source) VALUES (?,?,?)", docID, tag, source)
+	}
+	insertTag("wiki/a.md", "RAG", "tag")
+	insertTag("wiki/b.md", "RAG", "tag")
+	insertTag("wiki/b.md", "LLM", "tag")
+	insertTag("wiki/c.md", "LLM", "tag")
+	insertTag("wiki/d.md", "Other", "tag")
+
+	return db, dir
+}
+
+func TestTagExpand1Hop(t *testing.T) {
+	db, _ := setupTagsDB(t)
+
+	neighbors := TagExpand(db, []string{"wiki/a.md"}, 1, 10)
+	ids := make(map[string]bool)
+	for _, n := range neighbors {
+		ids[n.ID] = true
+	}
+
+	// A shares "RAG" with B → B should appear
+	if !ids["wiki/b.md"] {
+		t.Errorf("expected wiki/b.md in 1-hop neighbors, got %v", neighbors)
+	}
+	// A should NOT appear in its own neighbors
+	if ids["wiki/a.md"] {
+		t.Errorf("seed wiki/a.md should not appear in neighbors")
+	}
+	// D shares no tags with A → should not appear
+	if ids["wiki/d.md"] {
+		t.Errorf("wiki/d.md should not appear (no shared tags)")
+	}
+}
+
+func TestTagExpand2Hop(t *testing.T) {
+	db, _ := setupTagsDB(t)
+
+	neighbors := TagExpand(db, []string{"wiki/a.md"}, 2, 10)
+	ids := make(map[string]bool)
+	for _, n := range neighbors {
+		ids[n.ID] = true
+	}
+
+	// hop1: A→B (shared RAG)
+	// hop2: B→C (shared LLM), excluding A and B
+	if !ids["wiki/b.md"] {
+		t.Errorf("expected wiki/b.md in 2-hop neighbors")
+	}
+	if !ids["wiki/c.md"] {
+		t.Errorf("expected wiki/c.md in 2-hop neighbors via B")
+	}
+	if ids["wiki/a.md"] {
+		t.Errorf("seed wiki/a.md should not appear")
+	}
+}
+
+func TestTagExpandEmptySeeds(t *testing.T) {
+	db, _ := setupTagsDB(t)
+	neighbors := TagExpand(db, nil, 2, 10)
+	if len(neighbors) != 0 {
+		t.Errorf("expected empty result for nil seeds, got %v", neighbors)
+	}
+}
+
+func TestTagExpandLimit(t *testing.T) {
+	db, _ := setupTagsDB(t)
+	neighbors := TagExpand(db, []string{"wiki/a.md"}, 2, 1)
+	if len(neighbors) > 1 {
+		t.Errorf("expected at most 1 result with limit=1, got %d", len(neighbors))
+	}
+}
