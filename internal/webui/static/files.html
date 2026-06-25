@@ -43,8 +43,8 @@
             <thead>
                 <tr>
                     <th data-i18n="files.col_path">Path</th>
-                    <th data-i18n="files.col_size" style="width:90px">Size</th>
-                    <th data-i18n="files.col_modified" style="width:170px">Modified</th>
+                    <th data-i18n="files.col_size" style="width:80px;text-align:right">Size</th>
+                    <th data-i18n="files.col_modified" style="width:200px;white-space:nowrap">Modified</th>
                 </tr>
             </thead>
             <tbody id="files-body">
@@ -154,8 +154,8 @@ function renderPage() {
         const display = chars.length > 60 ? chars.slice(0, 60).join('') + '…' : full;
         return `<tr>
             <td title="${escHtml(full)}">${escHtml(display)}</td>
-            <td>${fmtSize(f.size)}</td>
-            <td>${fmtTime(f.mod_time)}</td>
+            <td style="text-align:right">${fmtSize(f.size)}</td>
+            <td style="white-space:nowrap">${fmtTime(f.mod_time)}</td>
         </tr>`;
     }).join('');
 
