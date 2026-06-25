@@ -90,26 +90,15 @@ func migrateDescription(db *sql.DB) error {
 		}
 	}
 
-	// 检查 distill_queue 表是否存在
-	hasDistillQueue := false
-	trows, terr := db.Query("SELECT name FROM sqlite_master WHERE type='table' AND name='distill_queue'")
-	if terr == nil {
-		if trows.Next() {
-			hasDistillQueue = true
-		}
-		trows.Close()
-	}
-	if !hasDistillQueue {
-		if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS distill_queue (
-        path        TEXT PRIMARY KEY,
-        status      TEXT NOT NULL DEFAULT 'pending',
-        retry_count INTEGER NOT NULL DEFAULT 0,
-        last_error  TEXT,
-        queued_at   INTEGER NOT NULL,
-        updated_at  INTEGER NOT NULL
-    )`); err != nil {
-			return err
-		}
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS distill_queue (
+    path        TEXT PRIMARY KEY,
+    status      TEXT NOT NULL DEFAULT 'pending',
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    last_error  TEXT,
+    queued_at   INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL
+)`); err != nil {
+		return err
 	}
 	return nil
 }
