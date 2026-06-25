@@ -37,6 +37,13 @@ HOW TO USE:
   3. kb_page(ids=[…]) — Deep-read documents of interest using IDs from
      kb_search results. Pass multiple IDs (up to 5) to scan several at once,
      or use full=true with a single ID to get complete untruncated text.
+  4. kb_add(filename, content, source_url?) — Add new content to the knowledge
+     base. filename is relative to raw/ — organize with any subdirectory
+     structure that fits your content (e.g. 'references/<slug>.md',
+     'converted/<slug>.md', 'wechat/<channel>/<slug>.md'). Use 'converted/'
+     for content you extracted from PDF/Word/Excel/EPUB so the watcher skips
+     the conversion step. Indexing is synchronous; distillation runs in the
+     background.
 
 QUERY EXPANSION (mandatory):
   Before searching, expand the query into aliases, abbreviations, and
@@ -148,6 +155,23 @@ func registerTools(s *mcpserver.MCPServer, kbRoot string, embedder kb.Embedder) 
 	// 	data := handleKBContext(kbRoot, question, limit, noVec, embedder)
 	// 	return toolResultJSON(data)
 	// })
+
+	// kb_add ──────────────────────────────────────────────────────────────────
+	addTool := mcp.NewTool("kb_add",
+		mcp.WithDescription("Add a text document to the knowledge base. Writes content to raw/<filename> and triggers incremental indexing. Distillation runs asynchronously in the background."),
+		mcp.WithString("filename", mcp.Required(), mcp.Description("Path relative to raw/. Use any subdirectory structure (e.g. 'references/article.md', 'converted/report.md', 'wechat/channel/post.md'). Use 'converted/' prefix for agent-extracted PDF/Word/Excel/EPUB content.")),
+		mcp.WithString("content", mcp.Required(), mcp.Description("File content (Markdown or plain text)")),
+		mcp.WithString("source_url", mcp.Description("Original source URL, written as a comment at the top of the file")),
+		mcp.WithBoolean("overwrite", mcp.Description("Overwrite if file already exists (default false)")),
+	)
+	s.AddTool(addTool, func(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		filename := req.GetString("filename", "")
+		content := req.GetString("content", "")
+		sourceURL := req.GetString("source_url", "")
+		overwrite := req.GetBool("overwrite", false)
+		data := handleKBAdd(kbRoot, filename, content, sourceURL, overwrite)
+		return toolResultJSON(data)
+	})
 
 	// kb_page ─────────────────────────────────────────────────────────────────
 	pageTool := mcp.NewTool("kb_page",

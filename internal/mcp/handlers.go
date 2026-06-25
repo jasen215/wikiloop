@@ -164,6 +164,52 @@ func handleKBPage(kbRoot string, ids []string, full bool) map[string]interface{}
 	return map[string]interface{}{"pages": pages}
 }
 
+// handleKBAdd writes content to raw/<filename> under kbRoot and triggers an
+// incremental index update. Distillation is handled asynchronously by the watcher.
+func handleKBAdd(kbRoot, filename, content, sourceURL string, overwrite bool) map[string]interface{} {
+	appendQueryLog(kbRoot, "kb_add", filename)
+
+	if strings.TrimSpace(filename) == "" {
+		return map[string]interface{}{"error": "filename is required"}
+	}
+	if strings.Contains(filepath.ToSlash(filename), "..") {
+		return map[string]interface{}{"error": "filename must not contain '..'"}
+	}
+
+	dst := filepath.Join(kbRoot, "raw", filepath.FromSlash(filename))
+
+	if !overwrite {
+		if _, err := os.Stat(dst); err == nil {
+			return map[string]interface{}{"error": "file already exists: raw/" + filename + ", use overwrite=true"}
+		}
+	}
+
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return map[string]interface{}{"error": "mkdir failed: " + err.Error()}
+	}
+
+	body := content
+	if strings.TrimSpace(sourceURL) != "" {
+		body = "<!-- source: " + sourceURL + " -->\n\n" + content
+	}
+
+	if err := os.WriteFile(dst, []byte(body), 0o644); err != nil {
+		return map[string]interface{}{"error": "write failed: " + err.Error()}
+	}
+
+	// Synchronous incremental index so kb_search finds the file immediately.
+	db, err := kb.OpenDB(kbRoot)
+	if err != nil {
+		return map[string]interface{}{"path": "raw/" + filename, "indexed": false, "index_error": err.Error()}
+	}
+	defer db.Close()
+	if _, err := kb.IndexFiles(db, kbRoot); err != nil {
+		return map[string]interface{}{"path": "raw/" + filename, "indexed": false, "index_error": err.Error()}
+	}
+
+	return map[string]interface{}{"path": "raw/" + filename, "indexed": true}
+}
+
 // handleKBLint runs deterministic health checks over wiki pages and returns
 // the list of warnings (missing required fields, broken source links).
 func handleKBLint(kbRoot string) map[string]interface{} {
