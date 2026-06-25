@@ -4,6 +4,7 @@ package kb
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -153,7 +154,7 @@ func setupTagsDB(t *testing.T) (*sql.DB, string) {
 	}
 	t.Cleanup(func() { db.Close() })
 
-	// Insert 4 documents
+	// Insert 4 primary documents
 	for _, row := range []struct{ id, title string }{
 		{"wiki/a.md", "Doc A"},
 		{"wiki/b.md", "Doc B"},
@@ -164,6 +165,16 @@ func setupTagsDB(t *testing.T) (*sql.DB, string) {
 			(id,path,layer,kind,title,description,content,content_hash,updated_at,authority,doc_timestamp)
 			VALUES (?,?,?,?,?,?,?,?,1,3,0)`,
 			row.id, row.id, "wiki", "source-note", row.title, "", "content", row.id)
+	}
+
+	// Insert 96 padding documents so that tags shared by 2/4 docs (50%) still
+	// pass the 5% IDF filter relative to the full 100-doc corpus (2/100 = 2%).
+	for i := 0; i < 96; i++ {
+		id := fmt.Sprintf("wiki/pad%d.md", i)
+		db.Exec(`INSERT INTO documents
+			(id,path,layer,kind,title,description,content,content_hash,updated_at,authority,doc_timestamp)
+			VALUES (?,?,?,?,?,?,?,?,1,3,0)`,
+			id, id, "wiki", "source-note", id, "", "content", id)
 	}
 
 	// Tags: A-B share "RAG", B-C share "LLM", D has no shared tags

@@ -54,8 +54,9 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleSearch runs FTS search and returns results.
-// Query params: q (required), layer (optional), limit (optional, default 10).
+// handleSearch runs layered FTS search and returns results with related docs.
+// Uses the same SearchLayered logic as the MCP kb_search tool.
+// Query params: q (required), layer (optional), kind (optional), limit (optional, default 10).
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	if q == "" {
@@ -74,6 +75,19 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	if l := r.URL.Query().Get("layer"); l != "" {
 		layer = &l
 	}
+	var kind *string
+	if k := r.URL.Query().Get("kind"); k != "" {
+		kind = &k
+	}
+
+	sourceLimit := limit
+	if sourceLimit <= 0 {
+		sourceLimit = 5
+	}
+	synthLimit := min(3, sourceLimit/2)
+	if synthLimit < 1 {
+		synthLimit = 1
+	}
 
 	db, err := kb.OpenDB(s.kbRoot)
 	if err != nil {
@@ -82,16 +96,15 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	defer db.Close()
 
-	results, graphPages, conflicts, err := kb.Search(db, s.kbRoot, q, layer, limit, nil)
+	results, conflicts, err := kb.SearchLayered(db, s.kbRoot, q, layer, kind, sourceLimit, synthLimit)
 	if err != nil {
 		writeJSON(w, map[string]interface{}{"error": err.Error()})
 		return
 	}
 
 	writeJSON(w, map[string]interface{}{
-		"results":     results,
-		"graph_pages": graphPages,
-		"conflicts":   conflicts,
+		"results":   results,
+		"conflicts": conflicts,
 	})
 }
 

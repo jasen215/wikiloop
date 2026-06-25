@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -166,7 +167,7 @@ func upsertDocument(db *sql.DB, kbRoot, path, did string, force bool) (bool, err
 	}
 
 	upsertLinks(db, did, parsed)
-	upsertDocumentTags(db, did, text, parsed.Tags)
+	upsertDocumentTags(db, did, parsed.KeyClaims)
 	return true, nil
 }
 
@@ -208,26 +209,57 @@ var knownTypes = map[string]bool{
 // entityRe matches 【name|type】 inline entity annotations.
 var entityRe = regexp.MustCompile(`【([^|】]+)\|([^】]+)】`)
 
-// upsertDocumentTags replaces all document_tags for docID with tags from two sources:
-//   - frontmatter tags (source='tag')
-//   - inline 【name|type】 entity annotations extracted from content (source='entity')
-func upsertDocumentTags(db *sql.DB, docID, content string, tags []string) {
+// tagNoiseRe matches tags that are noise: URLs, WeChat metadata, HTML entities, lone punctuation.
+var tagNoiseRe = regexp.MustCompile(`(?i)https?://|mmbiz|appmsg|wx_fmt|chksm|bizuin|^http|^nbsp$|^sources$|^pattern$|^from$|^wiki\]$|^\[`)
+
+// isNoisyTag reports whether a tag should be filtered out.
+func isNoisyTag(t string) bool {
+	if utf8.RuneCountInString(t) > 20 {
+		return true
+	}
+	// Pure ASCII lowercase short words that are HTML/Markdown artifacts
+	if len(t) <= 8 && t == strings.ToLower(t) && regexp.MustCompile(`^[a-z]+$`).MatchString(t) {
+		switch t {
+		case "nbsp", "sources", "pattern", "from", "wiki", "tag", "type", "true", "false", "null":
+			return true
+		}
+	}
+	return tagNoiseRe.MatchString(t)
+}
+
+var asciiStartRe = regexp.MustCompile(`^[a-zA-Z]`)
+
+// normalizeTag normalizes a tag for consistent matching:
+// - trims whitespace
+// - title-cases the first rune for all-lowercase ASCII tags (e.g. "karpathy" → "Karpathy")
+func normalizeTag(t string) string {
+	t = strings.TrimSpace(t)
+	if t == "" {
+		return t
+	}
+	if t == strings.ToLower(t) && asciiStartRe.MatchString(t) {
+		r := []rune(t)
+		r[0] = unicode.ToUpper(r[0])
+		return string(r)
+	}
+	return t
+}
+
+// upsertDocumentTags replaces all document_tags for docID using only entities
+// extracted from key_claims (source='claim'). key_claims entities are authored
+// by the LLM to represent the core named entities in each claim, so they have
+// much higher precision than full-text entity annotations or frontmatter tags.
+func upsertDocumentTags(db *sql.DB, docID string, claims []string) {
 	db.Exec("DELETE FROM document_tags WHERE doc_id = ?", docID) //nolint:errcheck
 
-	for _, t := range tags {
-		t = strings.TrimSpace(t)
-		if t == "" {
-			continue
+	for _, claim := range claims {
+		for _, m := range entityRe.FindAllStringSubmatch(claim, -1) {
+			name := normalizeTag(m[1])
+			if name == "" || utf8.RuneCountInString(name) < 2 || knownTypes[name] || isNoisyTag(name) {
+				continue
+			}
+			db.Exec("INSERT OR IGNORE INTO document_tags (doc_id, tag, source) VALUES (?, ?, 'claim')", docID, name) //nolint:errcheck
 		}
-		db.Exec("INSERT OR IGNORE INTO document_tags (doc_id, tag, source) VALUES (?, ?, 'tag')", docID, t) //nolint:errcheck
-	}
-
-	for _, m := range entityRe.FindAllStringSubmatch(content, -1) {
-		name := strings.TrimSpace(m[1])
-		if name == "" || utf8.RuneCountInString(name) < 2 || knownTypes[name] {
-			continue
-		}
-		db.Exec("INSERT OR IGNORE INTO document_tags (doc_id, tag, source) VALUES (?, ?, 'entity')", docID, name) //nolint:errcheck
 	}
 }
 

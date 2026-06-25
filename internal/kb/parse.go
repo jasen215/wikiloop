@@ -166,7 +166,7 @@ func parseYAMLSimple(text string) map[string]interface{} {
 }
 
 // asStringList coerces a frontmatter value to []string.
-// Handles nil, []string, and comma-separated string.
+// Handles nil, []string, inline JSON array string (["a","b"]), and comma-separated string.
 func asStringList(v interface{}) []string {
 	if v == nil {
 		return nil
@@ -177,6 +177,20 @@ func asStringList(v interface{}) []string {
 	if s, ok := v.(string); ok {
 		if s == "" {
 			return nil
+		}
+		// Inline JSON array: ["a", "b", ...] or [a, b, ...]
+		if strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]") {
+			inner := s[1 : len(s)-1]
+			parts := strings.Split(inner, ",")
+			out := make([]string, 0, len(parts))
+			for _, p := range parts {
+				p = strings.TrimSpace(p)
+				p = strings.Trim(p, `"'`)
+				if p != "" {
+					out = append(out, p)
+				}
+			}
+			return out
 		}
 		return strings.Split(s, ",")
 	}

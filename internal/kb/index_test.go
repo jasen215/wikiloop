@@ -108,7 +108,7 @@ func TestPurgeDeletedDocuments(t *testing.T) {
 	}
 }
 
-func TestUpsertDocumentTagsFromFrontmatter(t *testing.T) {
+func TestUpsertDocumentTagsFromClaims(t *testing.T) {
 	dir := t.TempDir()
 	db, err := OpenDB(dir)
 	if err != nil {
@@ -116,18 +116,20 @@ func TestUpsertDocumentTagsFromFrontmatter(t *testing.T) {
 	}
 	defer db.Close()
 
-	// 先插入一个文档（document_tags 有外键约束）
 	_, err = db.Exec(`INSERT INTO documents
 		(id, path, layer, kind, title, description, content, content_hash, updated_at, authority, doc_timestamp)
-		VALUES ('raw/a.md','raw/a.md','raw','','title','','content','abc',1,3,0)`)
+		VALUES ('wiki/a.md','wiki/a.md','wiki','source-note','title','','content','abc',1,3,0)`)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	tags := []string{"RAG", "向量数据库", "Qdrant"}
-	upsertDocumentTags(db, "raw/a.md", "no entities here", tags)
+	claims := []string{
+		"【Karpathy|人物】提出【LLM Wiki|概念】，由【Anthropic|组织】验证",
+		"基于【Obsidian|产品】实现知识管理",
+	}
+	upsertDocumentTags(db, "wiki/a.md", claims)
 
-	rows, err := db.Query("SELECT tag, source FROM document_tags WHERE doc_id='raw/a.md' ORDER BY tag")
+	rows, err := db.Query("SELECT tag, source FROM document_tags WHERE doc_id='wiki/a.md' ORDER BY tag")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,55 +143,13 @@ func TestUpsertDocumentTagsFromFrontmatter(t *testing.T) {
 		got = append(got, r)
 	}
 
-	if len(got) != 3 {
-		t.Fatalf("expected 3 tags, got %d: %v", len(got), got)
+	// 期望：Anthropic, Karpathy, LLM Wiki, Obsidian（4个 claim 实体）
+	if len(got) != 4 {
+		t.Fatalf("expected 4 claim tags, got %d: %v", len(got), got)
 	}
 	for _, r := range got {
-		if r.source != "tag" {
-			t.Errorf("expected source=tag, got %q", r.source)
-		}
-	}
-}
-
-func TestUpsertDocumentTagsFromEntities(t *testing.T) {
-	dir := t.TempDir()
-	db, err := OpenDB(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-
-	_, err = db.Exec(`INSERT INTO documents
-		(id, path, layer, kind, title, description, content, content_hash, updated_at, authority, doc_timestamp)
-		VALUES ('raw/b.md','raw/b.md','raw','','title','','content','def',1,3,0)`)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	content := "【Karpathy|人物】提出【LLM Wiki|概念】，由【Anthropic|组织】验证"
-	upsertDocumentTags(db, "raw/b.md", content, nil)
-
-	rows, err := db.Query("SELECT tag, source FROM document_tags WHERE doc_id='raw/b.md' ORDER BY tag")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-
-	type row struct{ tag, source string }
-	var got []row
-	for rows.Next() {
-		var r row
-		rows.Scan(&r.tag, &r.source)
-		got = append(got, r)
-	}
-
-	// 期望：Karpathy, LLM Wiki, Anthropic（3个实体）
-	if len(got) != 3 {
-		t.Fatalf("expected 3 entity tags, got %d: %v", len(got), got)
-	}
-	for _, r := range got {
-		if r.source != "entity" {
-			t.Errorf("expected source=entity, got %q", r.source)
+		if r.source != "claim" {
+			t.Errorf("expected source=claim, got %q for tag %q", r.source, r.tag)
 		}
 	}
 }
@@ -204,7 +164,7 @@ func TestUpsertDocumentTagsFiltersNoise(t *testing.T) {
 
 	_, err = db.Exec(`INSERT INTO documents
 		(id, path, layer, kind, title, description, content, content_hash, updated_at, authority, doc_timestamp)
-		VALUES ('raw/c.md','raw/c.md','raw','','title','','content','ghi',1,3,0)`)
+		VALUES ('wiki/b.md','wiki/b.md','wiki','source-note','title','','content','def',1,3,0)`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,12 +172,37 @@ func TestUpsertDocumentTagsFiltersNoise(t *testing.T) {
 	// 【技术|库】：name="技术" 是 type 词，应过滤
 	// 【A|产品】：name 长度 1，应过滤
 	// 【OpenAI|组织】：有效
-	content := "【技术|库】做了【A|产品】，基于【OpenAI|组织】"
-	upsertDocumentTags(db, "raw/c.md", content, nil)
+	claims := []string{"【技术|库】做了【A|产品】，基于【OpenAI|组织】"}
+	upsertDocumentTags(db, "wiki/b.md", claims)
 
 	var count int
-	db.QueryRow("SELECT COUNT(*) FROM document_tags WHERE doc_id='raw/c.md'").Scan(&count)
+	db.QueryRow("SELECT COUNT(*) FROM document_tags WHERE doc_id='wiki/b.md'").Scan(&count)
 	if count != 1 {
-		t.Errorf("expected 1 valid entity (OpenAI), got %d", count)
+		t.Errorf("expected 1 valid claim entity (OpenAI), got %d", count)
+	}
+}
+
+func TestUpsertDocumentTagsNilClaims(t *testing.T) {
+	dir := t.TempDir()
+	db, err := OpenDB(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	_, err = db.Exec(`INSERT INTO documents
+		(id, path, layer, kind, title, description, content, content_hash, updated_at, authority, doc_timestamp)
+		VALUES ('wiki/c.md','wiki/c.md','wiki','source-note','title','','content','ghi',1,3,0)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 没有 key_claims 的文档 → 不写入任何 tag
+	upsertDocumentTags(db, "wiki/c.md", nil)
+
+	var count int
+	db.QueryRow("SELECT COUNT(*) FROM document_tags WHERE doc_id='wiki/c.md'").Scan(&count)
+	if count != 0 {
+		t.Errorf("expected 0 tags for nil claims, got %d", count)
 	}
 }

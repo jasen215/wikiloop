@@ -3,6 +3,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,9 +15,9 @@ import (
 )
 
 // appendQueryLog appends a JSONL entry to wiki/query_log.jsonl for AI behavior analysis.
-// Each line: {"ts":"...","tool":"kb_search|kb_page|kb_status|kb_reindex|kb_lint","query":"..."}
-// Non-fatal: errors are silently ignored to avoid disrupting normal operation.
-func appendQueryLog(kbRoot, tool, query string) {
+// Each line: {"ts":"...","tool":"...","query":"...","related":["id1","id2",...]}
+// related is omitted when empty. Non-fatal: errors are silently ignored.
+func appendQueryLog(kbRoot, tool, query string, related ...string) {
 	now := time.Now().UTC()
 	date := now.Format("2006-01-02")
 	logPath := filepath.Join(kbRoot, "wiki", "query_log_"+date+".jsonl")
@@ -26,7 +27,12 @@ func appendQueryLog(kbRoot, tool, query string) {
 	}
 	defer f.Close()
 	ts := now.Format("2006-01-02T15:04:05Z")
-	fmt.Fprintf(f, "{\"ts\":%q,\"tool\":%q,\"query\":%q}\n", ts, tool, query)
+	if len(related) > 0 {
+		b, _ := json.Marshal(related)
+		fmt.Fprintf(f, "{\"ts\":%q,\"tool\":%q,\"query\":%q,\"related\":%s}\n", ts, tool, query, b)
+	} else {
+		fmt.Fprintf(f, "{\"ts\":%q,\"tool\":%q,\"query\":%q}\n", ts, tool, query)
+	}
 }
 
 // handleKBStatus returns document and embedding counts plus index file size.
@@ -70,7 +76,6 @@ func handleKBStatus(kbRoot string) map[string]interface{} {
 
 // handleKBSearch runs layered FTS search and returns results with related docs.
 func handleKBSearch(kbRoot, query string, layer, kind *string, limit int) map[string]interface{} {
-	appendQueryLog(kbRoot, "kb_search", query)
 	db, err := kb.OpenDB(kbRoot)
 	if err != nil {
 		return map[string]interface{}{"error": err.Error()}
@@ -90,6 +95,19 @@ func handleKBSearch(kbRoot, query string, layer, kind *string, limit int) map[st
 	if err != nil {
 		return map[string]interface{}{"error": err.Error()}
 	}
+
+	// Collect all related doc IDs from results for query log.
+	var relatedIDs []string
+	seen := make(map[string]bool)
+	for _, r := range results {
+		for _, rel := range r.Related {
+			if !seen[rel.ID] {
+				seen[rel.ID] = true
+				relatedIDs = append(relatedIDs, rel.ID)
+			}
+		}
+	}
+	appendQueryLog(kbRoot, "kb_search", query, relatedIDs...)
 
 	return map[string]interface{}{
 		"results":   results,
