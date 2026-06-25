@@ -291,3 +291,51 @@ func KBLint(kbRoot string) (*LintResult, error) {
 	}
 	return &LintResult{Warnings: warnings, Count: len(warnings)}, nil
 }
+
+// FileInfo describes a single file in the raw/ directory.
+type FileInfo struct {
+	Name    string `json:"name"`
+	Path    string `json:"path"` // relative path from raw/
+	Size    int64  `json:"size"`
+	ModTime int64  `json:"mod_time"` // Unix timestamp
+}
+
+// KBListFiles returns FileInfo for each regular file under kbRoot/raw/,
+// recursively, skipping hidden files and the converted/ directory.
+func KBListFiles(kbRoot string) ([]FileInfo, error) {
+	rawDir := filepath.Join(kbRoot, "raw")
+	if _, err := os.Stat(rawDir); os.IsNotExist(err) {
+		return []FileInfo{}, nil
+	}
+	var files []FileInfo
+	err := filepath.Walk(rawDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		name := info.Name()
+		if strings.HasPrefix(name, ".") {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if info.IsDir() && name == "converted" && filepath.Dir(path) == rawDir {
+			return filepath.SkipDir
+		}
+		if info.IsDir() {
+			return nil
+		}
+		rel, _ := filepath.Rel(rawDir, path)
+		files = append(files, FileInfo{
+			Name:    name,
+			Path:    rel,
+			Size:    info.Size(),
+			ModTime: info.ModTime().Unix(),
+		})
+		return nil
+	})
+	if err != nil {
+		return nil, &KBError{Code: 500, Message: err.Error()}
+	}
+	return files, nil
+}

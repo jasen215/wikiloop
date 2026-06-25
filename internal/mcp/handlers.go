@@ -6,13 +6,7 @@ import (
 	"errors"
 
 	"github.com/jasen215/wikiloop/internal/kb"
-	"github.com/mark3labs/mcp-go/mcp"
 )
-
-// kbErrToMCP converts a KB service error to an MCP tool error result.
-func kbErrToMCP(err error) *mcp.CallToolResult {
-	return mcp.NewToolResultError(err.Error())
-}
 
 func handleKBStatus(kbRoot string) map[string]interface{} {
 	result, err := kb.KBStatus(kbRoot)

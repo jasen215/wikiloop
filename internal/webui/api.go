@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -73,19 +72,11 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, resp)
 }
 
-// FileInfo describes a single file in the raw/ directory.
-type FileInfo struct {
-	Name    string `json:"name"`
-	Path    string `json:"path"` // relative path from raw/ (e.g. "ebooks/Chip/xxx.md")
-	Size    int64  `json:"size"`
-	ModTime int64  `json:"mod_time"` // Unix timestamp
-}
-
 // handleFiles lists files in the raw/ subdirectory of kbRoot.
 func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
-	files, err := listRawFiles(s.kbRoot)
+	files, err := kb.KBListFiles(s.kbRoot)
 	if err != nil {
-		writeJSON(w, map[string]interface{}{"error": err.Error()})
+		kbErrToHTTP(w, err)
 		return
 	}
 	writeJSON(w, map[string]interface{}{"files": files})
@@ -228,54 +219,6 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 func writeJSON(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
-}
-
-// listRawFiles returns FileInfo for each regular file under kbRoot/raw/,
-// recursively, skipping hidden files and the converted/ directory.
-// Returns an empty slice (not an error) when the directory doesn't exist.
-func listRawFiles(kbRoot string) ([]FileInfo, error) {
-	rawDir := filepath.Join(kbRoot, "raw")
-	if _, err := os.Stat(rawDir); os.IsNotExist(err) {
-		return []FileInfo{}, nil
-	}
-
-	var files []FileInfo
-	err := filepath.Walk(rawDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		name := info.Name()
-
-		// Skip hidden files and directories.
-		if strings.HasPrefix(name, ".") {
-			if info.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-
-		// Skip the converted/ directory (generated output).
-		if info.IsDir() && name == "converted" && filepath.Dir(path) == rawDir {
-			return filepath.SkipDir
-		}
-
-		if info.IsDir() {
-			return nil
-		}
-
-		rel, _ := filepath.Rel(rawDir, path)
-		files = append(files, FileInfo{
-			Name:    name,
-			Path:    rel,
-			Size:    info.Size(),
-			ModTime: info.ModTime().Unix(),
-		})
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return files, nil
 }
 
 // handleReindex triggers FTS index rebuild. POST /api/reindex?full=true
