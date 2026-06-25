@@ -6,6 +6,7 @@ import (
 	"context"
 	"log"
 	"math"
+	"path/filepath"
 	"time"
 
 	"github.com/jasen215/wikiloop/internal/kb"
@@ -55,7 +56,7 @@ func workerLoop(ctx context.Context, cfg Config, kbRoot string, fn distillFunc) 
 			continue
 		}
 
-		rawPath := kbRoot + "/raw/" + path
+		rawPath := filepath.Join(kbRoot, "raw", filepath.FromSlash(path))
 		log.Printf("distill worker: processing %s", path)
 
 		distillErr := fn(cfg, rawPath, kbRoot, nil)
