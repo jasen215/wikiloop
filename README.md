@@ -129,7 +129,11 @@ sudo ln -sf /path/to/install/wikiloop /usr/local/bin/wikiloop
 Requires Go 1.25+. No CGO required.
 
 ```bash
+# macOS / Linux
 go build -tags fts5 -o wikiloop ./cmd/wikiloop/
+
+# Windows
+go build -tags fts5 -o wikiloop.exe ./cmd/wikiloop/
 ```
 
 Or use the multi-platform build script:
@@ -143,6 +147,7 @@ Or use the multi-platform build script:
 | `darwin-arm64` | `dist/WikiLoop-<version>-darwin-arm64.dmg` | macOS Apple Silicon |
 | `linux-amd64` | `dist/wikiloop-<version>-linux-amd64.tar.gz` | Linux x86_64 |
 | `linux-arm64` | `dist/wikiloop-<version>-linux-arm64.tar.gz` | Linux ARM64 |
+| `windows-amd64` | `dist/wikiloop-<version>-windows-amd64.zip` | Windows x86_64 |
 
 ## Repository Structure
 
