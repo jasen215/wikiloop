@@ -93,40 +93,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: WikiLoop v${{ steps.version.outputs.VERSION }}
-          body: |
-            ## What's New
-
-            - **Knowledge search engine for agents** — kb_search returns layered results with `related` field for graph navigation
-            - **kb_page tool** — deep-read full document content by ID
-            - **Removed vector search** — pure FTS (SQLite FTS5 + BM25), no embedding model required; binary ~20MB
-            - **Windows support** — pure Go build, no CGO dependencies
-            - **Lark/Feishu import** — `wikiloop import-lark <URL>` imports Wiki pages and embedded tables
-            - **synthesized pages _draft/ threshold** — single-source pages go to `_draft/`, graduate when ≥2 sources
-            - **synthesizedBoost** — multiplicative 1.3× boost for concept/comparison/decision pages
-
-            ## Installation
-
-            ### macOS Apple Silicon
-            1. Download `WikiLoop-${{ steps.version.outputs.VERSION }}-darwin-arm64.dmg`
-            2. Open the DMG and drag WikiLoop to Applications
-
-            ### Linux (x86_64 / ARM64)
-            ```bash
-            tar -xzf wikiloop-${{ steps.version.outputs.VERSION }}-linux-<arch>.tar.gz
-            sudo ln -sf $(pwd)/wikiloop /usr/local/bin/wikiloop
-            ```
-
-            ### Windows (x86_64)
-            ```powershell
-            Expand-Archive wikiloop-${{ steps.version.outputs.VERSION }}-windows-amd64.zip
-            # Add wikiloop.exe to PATH
-            ```
-
-            See [README](https://github.com/jasen215/wikiloop#quick-start) for full setup instructions.
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
           files: |
             dist/WikiLoop-${{ steps.version.outputs.VERSION }}-darwin-arm64.dmg
             dist/wikiloop-${{ steps.version.outputs.VERSION }}-linux-amd64.tar.gz
             dist/wikiloop-${{ steps.version.outputs.VERSION }}-linux-arm64.tar.gz
             dist/wikiloop-${{ steps.version.outputs.VERSION }}-windows-amd64.zip
-          draft: false
-          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
