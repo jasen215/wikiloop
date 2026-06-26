@@ -124,6 +124,14 @@ sudo ln -sf /path/to/install/wikiloop /usr/local/bin/wikiloop
 
 **Windows:** Extract the zip and run `wikiloop.exe serve` (or `wikiloop.exe stdio` for MCP). Add the directory to `PATH` for convenience. No CGO required — pure Go binary.
 
+**HarmonyOS PC (community, experimental):** WikiLoop is not officially released for HarmonyOS PC. However, since the core binary requires no CGO (pure Go + SQLite), it can be built natively on HarmonyOS using the community [Harmonybrew](https://harmonybrew.dev) package manager. See [ohos_go_cgo](https://github.com/ohos-go/ohos_go_cgo) for a guide on setting up Go + CGO on HarmonyOS PC.
+
+```bash
+# On HarmonyOS PC (after installing Go via Harmonybrew)
+CGO_ENABLED=0 go build -tags fts5 -o wikiloop ./cmd/wikiloop/
+wikiloop serve
+```
+
 ## Building from Source
 
 Requires Go 1.25+. No CGO required.
