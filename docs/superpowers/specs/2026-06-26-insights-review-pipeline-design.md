@@ -4,7 +4,7 @@
 
 WikiLoop 知识库当前只能通过人工放置文件到 `raw/` 来增长。引入 `kb_add` 工具后，外部 Agent 可以在对话结束时把洞察写入 `raw/insights/`，但这些内容质量参差不齐——有真正有价值的跨文档综合结论，也有无意义的对话记录。
 
-本设计实现一条**异步 LLM 审核流水线**：Agent 写入的 insights 先进 inbox，由审核 worker 自动搜索知识库验证、评估质量、格式化，通过后自动 promote 到 `raw/reviewed/<分类>/`，触发正式蒸馏。原始 insights 文件作为过程文件，处理后删除。
+本设计实现一条**异步 LLM 审核流水线**：Agent 通过 `kb_add` 把洞察写入 `raw/insights/`（作为 inbox 目录），由审核 worker 自动搜索知识库验证、评估质量，通过后 promote 到 `raw/reviewed/<分类>/`，触发正式蒸馏。`raw/insights/` 里的文件保留 1 年，不立即删除。
 
 ---
 
@@ -68,8 +68,8 @@ InsightReviewer 按 section 差异化处理：
 ```
 Agent 对话结束
   └─ kb_add(filename="insights/YYYY-MM-DD-<slug>.md", content="...")
-       └─ 写入 raw/insights/（inbox）
-            ├─ watcher 触发：FTS 索引（可搜索）
+       └─ 写入 raw/insights/
+            ├─ watcher 触发：FTS 索引（可搜索，Agent 可搜到历史 insights）
             ├─ watcher 触发：insights_queue 入队（status=pending）
             └─ 不触发 distill_queue（跳过正式蒸馏）
 
