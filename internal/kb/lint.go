@@ -16,7 +16,7 @@ var requiredFMFields = []string{"title", "type", "sources", "timestamp"}
 // LintWarning is a single issue found by Lint, tied to a KB-root-relative path.
 type LintWarning struct {
 	Path   string `json:"path"`
-	Kind   string `json:"kind"`   // "missing_field" | "broken_source"
+	Kind   string `json:"kind"`   // "missing_field" | "broken_source" | "broken_related" | "missing_concept"
 	Detail string `json:"detail"` // field name or source path
 }
 

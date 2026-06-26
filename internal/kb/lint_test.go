@@ -145,6 +145,9 @@ func TestCleanBrokenLinks_PathAndConcept(t *testing.T) {
 	if !findWarning(warnings, "wiki/src.md", "missing_concept", "数字经济") {
 		t.Errorf("expected missing_concept warning; got %+v", warnings)
 	}
+	if !findWarning(warnings, "wiki/src2.md", "missing_concept", "数字经济") {
+		t.Errorf("expected missing_concept warning for src2.md; got %+v", warnings)
+	}
 
 	// All 3 broken rows deleted.
 	var n int
