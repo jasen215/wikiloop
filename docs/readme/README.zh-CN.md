@@ -13,6 +13,8 @@
 
 WikiLoop 是面向 Agent 的本地优先知识搜索引擎。它把原始文档蒸馏为结构化、可 review 的 Markdown 知识库，通过两个 MCP 工具——`kb_search` 和 `kb_page`——让 Agent 按自己的节奏搜索和深读。
 
+![WikiLoop Screenshot](image-001.png)
+
 ## 设计理念
 
 WikiLoop 基于一个核心观察：**不要你以为，我要我以为**——Agent 更愿意使用外部知识工具的方式和人用搜索引擎一样，用不同关键词多次查询，顺着关联链接展开，最终自己综合结论。它们不需要系统打包好的答案，需要的是能自主验证、自主汇总的原始材料。
@@ -135,7 +137,11 @@ wikiloop serve
 需要 Go 1.25+，无需 CGO。
 
 ```bash
+# macOS / Linux
 go build -tags fts5 -o wikiloop ./cmd/wikiloop/
+
+# Windows
+go build -tags fts5 -o wikiloop.exe ./cmd/wikiloop/
 ```
 
 或使用多平台构建脚本：
@@ -149,6 +155,7 @@ go build -tags fts5 -o wikiloop ./cmd/wikiloop/
 | `darwin-arm64` | `dist/WikiLoop-<version>-darwin-arm64.dmg` | macOS Apple Silicon |
 | `linux-amd64` | `dist/wikiloop-<version>-linux-amd64.tar.gz` | Linux x86_64 |
 | `linux-arm64` | `dist/wikiloop-<version>-linux-arm64.tar.gz` | Linux ARM64 |
+| `windows-amd64` | `dist/wikiloop-<version>-windows-amd64.zip` | Windows x86_64 |
 
 ## 仓库结构
 
@@ -210,55 +217,6 @@ wikiloop lint           # 健康检查 wiki 页面
 
 **LLM 配置**（KB 根目录的 `config.yaml` 的 `distill` 段）是 `distill` 和 `synthesize` 的必要条件。
 
-### synthesize 工作流
-
-原始资料来源不限：Agent 抓取的网页、用户放入的文档、调研报告、任意 Markdown 文件。
-
-**第一步：资料进入 KB（自动）**
-
-把 Markdown 放入 `raw/`（按来源分目录，如 `raw/wechat-tech/`、`raw/papers/`），`wikiloop serve` 的 watcher 自动完成蒸馏 + 建索引。
-
-**第二步：按主题生成综合页（按需）**
-
-```bash
-# 对"芯片产业"话题生成 concept/comparison/decision 页面
-wikiloop synthesize --topic "芯片产业"
-
-# 全量重跑（忽略增量缓存）
-wikiloop synthesize --topic "芯片产业" --full
-
-# 不指定主题：处理所有新增/变更的 source-notes
-wikiloop synthesize
-
-# 知识缺口分析
-wikiloop synthesize --gaps --topic "芯片产业"
-# 输出：index/gaps/zhi-pian-chan-ye.md
-```
-
-`--topic` 按 source-note 的 `title` 或 `tags` 字段做大小写不敏感子串匹配。
-
-综合页类型：
-
-| 类型 | 输出目录 | 来源不足时 |
-|---|---|---|
-| concept | `wiki/concepts/` | 进入 `_draft/`，积累后自动晋级 |
-| comparison | `wiki/comparisons/` | 同上 |
-| decision | `wiki/decisions/` | 同上 |
-
-## 系统服务（可选）
-
-`wikiloop serve` 启动后内置 watcher 会自动监控 KB 目录变化、触发蒸馏和建索引，无需额外配置。
-
-如果需要让 WikiLoop **开机自启、后台常驻**，可以安装为系统服务（macOS launchd / Linux systemd）：
-
-```bash
-wikiloop service install --kb /path/to/your-kb
-wikiloop service status
-wikiloop service uninstall
-```
-
-日志：`{WIKILOOP_KB}/index/watcher.log`
-
 ## MCP Server
 
 WikiLoop 通过 MCP 协议对外暴露 KB 工具。
@@ -280,7 +238,7 @@ export WIKILOOP_KB=/path/to/wikiloop-kb
 wikiloop serve
 ```
 
-> macOS 也可直接双击 WikiLoop.app 启动（menubar 图标）。App 启动时自动读取 `~/.zshenv`、`~/.bashrc` 等 shell 配置文件中的 `WIKILOOP_*` 环境变量。
+> macOS 也可直接双击 WikiLoop.app 启动（menubar 图标）。
 
 **第二步：各 Agent 配置 HTTP MCP**
 
@@ -306,7 +264,7 @@ wikiloop serve
 
 ### 场景二：托管 Agent 环境（Hermes / OpenClaw 等）
 
-托管环境的容器无法访问用户本地进程，需将 WikiLoop 安装在 Agent 所在环境的**持久卷**中，通过 stdio 本地调用。
+托管环境中，将 WikiLoop 安装在持久卷上，通过 **stdio** 调用——WikiLoop 作为 Agent 宿主的子进程启动，watcher 在后台自动运行。
 
 以 NAS 挂载的 OpenClaw/Hermes 为例（挂载点 `/root/.openclaw`）：
 
@@ -317,33 +275,59 @@ tar -xzf wikiloop-linux-amd64.tar.gz -C /root/.openclaw/wikiloop/
 chmod +x /root/.openclaw/wikiloop/wikiloop
 ```
 
-容器重建后 NAS 重新挂载，二进制和 KB 数据均保留。
+**2. 安装 markitdown（推荐）：**
 
-**2. MCP 配置：**
+markitdown 支持将 PDF、Word、Excel、PPT、HTML 文件转换为 Markdown 后再蒸馏。未安装时，仅 `.md` 和 `.txt` 文件会被蒸馏；二进制文件仅按文件名建索引。
 
-Claude Code (`~/.claude.json`)：
-
-```json
-{
-  "mcpServers": {
-    "wikiloop": {
-      "command": "/root/.openclaw/wikiloop/wikiloop",
-      "args": ["serve"],
-      "env": {
-        "WIKILOOP_KB": "/root/.openclaw/wikiloop-kb"
-      }
-    }
-  }
-}
+```bash
+pip install markitdown
+# 验证
+markitdown --version
 ```
 
-Hermes (`mcp_servers` in agent config)：
+> 已在 OpenClaw/Hermes 上验证可用（路径：`/root/.openclaw/workspace/bin/markitdown`）。将 `workspace/bin` 加入 PATH，或在环境中设置完整路径。
+
+如果 markitdown 不可用，Agent 可自行提取文本（使用 LLM 视觉或其他工具），直接将结果写入 `$WIKILOOP_KB/raw/converted/<slug>.md`——watcher 会自动拾取。
+
+**3. MCP 配置：**
+
+Hermes（agent config 中的 `mcp_servers`）：
 
 ```yaml
 mcp_servers:
   wikiloop:
     command: /root/.openclaw/wikiloop/wikiloop
-    args: [serve]
+    args: [stdio]
     env:
       WIKILOOP_KB: /root/.openclaw/wikiloop-kb
+      PATH: /root/.openclaw/workspace/bin:/usr/local/bin:/usr/bin:/bin
 ```
+
+KB 目录在首次启动时自动创建，无需手动执行 `init`。
+
+**4. 向知识库添加内容：**
+
+有 `write_file` 权限的 Agent 可直接写入 KB——watcher 检测到变更后自动触发建索引和蒸馏。
+
+| 内容类型 | 写入路径 |
+|---|---|
+| 文章、笔记、参考资料（Markdown/文本） | `$WIKILOOP_KB/raw/<你的分类>/<slug>.md` |
+| Agent 转换的 PDF / Word / Excel / EPUB 内容 | `$WIKILOOP_KB/raw/converted/<slug>.md` |
+
+`raw/converted/` 中的文件被视为已转换，直接进入蒸馏，跳过 markitdown 步骤。`raw/` 下其他路径均经过完整流水线处理（转换 → 建索引 → 蒸馏）。
+
+`raw/` 下的子目录组织方式不限——WikiLoop 不强制规定固定结构。
+
+## 系统服务（可选）
+
+`wikiloop serve` 启动后内置 watcher 会自动监控 KB 目录变化、触发蒸馏和建索引，无需额外配置。
+
+如果需要让 WikiLoop **开机自启、后台常驻**，可以安装为系统服务（macOS launchd / Linux systemd）：
+
+```bash
+wikiloop service install --kb /path/to/your-kb
+wikiloop service status
+wikiloop service uninstall
+```
+
+日志：`{WIKILOOP_KB}/index/watcher.log`
