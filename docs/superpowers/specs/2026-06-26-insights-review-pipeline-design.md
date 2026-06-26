@@ -144,6 +144,7 @@ func reviewInsightFile(cfg Config, kbRoot string, path string) (bool, string, st
 formatted_content 需包含 YAML frontmatter：
   type: source-note
   title, description, tags, doc_type, authority(2-3), resource:"", sources:["__RAW_SOURCE__"], timestamp
+  origin: insights   # 标记来源，区别于人工放入的文件，便于审计和清理
 ```
 
 ### 2. `internal/distill/distill.go`（改动）
@@ -207,3 +208,64 @@ if strings.HasPrefix(rel, "insights/") {
 - 触发条件：发现文档关联未互指、综合出新角度、使用了外部信息
 - 不写条件：回答完全来自已有综合页（最常见情况）
 - 格式：一文件三 section，只写有内容的 section
+
+---
+
+## 已知风险与待解决问题（暂不实施）
+
+以下问题在当前设计中存在，已识别但暂不处理，待知识库规模增长后再评估是否需要干预。
+
+### 风险 1：过拟合——关系网络偏向高频查询话题
+
+**问题：** Agent 写 insights 的频率取决于用户问什么问题。同一对文档被反复问到，related_to 关系被 promote；从未被问到的文档对，关系永远不会被发现。
+
+**结果：** related_to 网络逐渐成为"查询分布的影子"，而不是"文档内容本身的语义结构"。
+
+**缓解（已有）：** InsightWorker 严格审核、蒸馏二次过滤。
+
+**待解决：** 无话题多样性约束，同一话题可以无限积累 promote。
+
+---
+
+### 风险 2：连接泛化不足
+
+**问题：** insights 机制只能覆盖**被查询到的知识路径**。知识库里存在但从未被问到的关联，永远不会通过 insights 被发现。这是结构性局限，无法通过改进 InsightWorker 解决。
+
+**影响范围：** 低频话题的 related_to 稀疏问题不会因为 insights 机制而改善。
+
+**长期方向：** 离线批量分析文档相似度（不依赖查询），作为补充（参见探索文档 §26.1 WITH RECURSIVE 多跳）。
+
+---
+
+### 风险 3：综合页话题分布偏移
+
+**问题：** 用户集中问某类话题时，该话题的 insights 大量积累，promote 后生成大量相关综合页，知识库综合层向高频话题倾斜，低频话题综合覆盖越来越薄。
+
+**缓解（已有）：** `origin: insights` 标记可以追踪哪些综合页来自 insights 流水线。
+
+**待解决方案（暂不实施）：**
+- InsightWorker promote 前检查 `raw/reviewed/` 同话题已有内容数量，超过阈值提高 skip 门槛
+- `kb_lint` 统计 `origin: insights` 内容占比，超过一定比例时告警
+
+---
+
+### 风险 4：promote 内容无法反向校正
+
+**问题：** 一旦 insights 内容 promote 进 `raw/reviewed/` 并触发蒸馏，没有自动撤回机制。如果某条关系或结论是错的，只能靠 `kb_lint` 人工发现后手动删除。
+
+**缓解（已有）：** `origin: insights` 标记使人工审计可定向进行——`kb_lint` 可以列出所有 `origin: insights` 的文档供人工复核。
+
+**待解决：** 目前 `kb_lint` 尚未实现对 `origin` 字段的检测，需要后续补充。
+
+---
+
+### 总结：当前设计的安全边界
+
+| 风险 | 严重程度 | 当前缓解 | 是否需要立即处理 |
+|------|---------|---------|----------------|
+| 关系过拟合 | 中 | 严格审核 + 低频处理 | 否，规模小时影响有限 |
+| 连接泛化不足 | 低 | 结构性局限，接受 | 否 |
+| 话题分布偏移 | 中 | origin 标记可追踪 | 否，待规模增长后观察 |
+| 无反向校正 | 低 | origin 标记 + 人工审计 | 否，目前 promote 量极少 |
+
+**结论：** 当前知识库规模（518 篇 source-note）下，这些风险的实际影响可忽略。InsightWorker 的严格审核是主要保护。待 insights 来源内容积累到可观规模（如 50+ 篇）后，再评估是否需要补充话题配额和自动告警机制。
