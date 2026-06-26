@@ -58,6 +58,33 @@ DO NOT:
   - Expect WikiLoop to give you the answer — synthesize from what you find
   - Use WikiLoop for questions answerable from current code or git history
 
+KNOWLEDGE CAPTURE (query feedback loop):
+  After answering a question using WikiLoop, ask yourself: did this conversation
+  produce something that is NOT already in the knowledge base?
+
+  WRITE BACK only when one of these specific conditions is true:
+  - You used information OUTSIDE WikiLoop (training knowledge, external search)
+    to supplement the answer — that external knowledge is not yet in the KB.
+  - The user provided a new fact, data point, or decision that is not recorded
+    anywhere in the KB (e.g., "we decided X", "the benchmark shows Y").
+  - You noticed a connection between two concepts, but no comparison or concept
+    page covers that relationship.
+  - The user explicitly says "remember this" or "save this".
+
+  DO NOT write back when:
+  - Your answer was synthesized entirely from existing KB documents — the
+    knowledge is already there, writing it again creates redundancy.
+  - The conclusion is a re-summary of existing concept/comparison/decision pages.
+  - You are unsure whether the insight is correct — do not pollute the KB.
+  - The content is session-specific or operational (e.g., "user asked about X",
+    "MCP tool list was updated").
+
+  HOW TO WRITE BACK:
+    kb_add(
+      filename="insights/YYYY-MM-DD-<slug>.md",
+      content="# <Title>\n\n<your synthesized insight in Markdown>\n\n## Sources\n- [path1]\n- [path2]"
+    )
+
 CITATION RULES (mandatory):
   - Always cite source paths in your answer using the id/path field.
     Example: "According to [wiki/source-notes/xxx.md], ..."
