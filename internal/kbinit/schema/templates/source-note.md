@@ -21,9 +21,11 @@ key_claims: []  # REQUIRED: 5-8 specific, searchable claims in the source's orig
                # ALIAS RULE: Inline ALL known aliases, abbreviations, and cross-language equivalents directly in each claim.
                # BAD:  "CR 偏低需要优化"
                # GOOD: "Context Recall（CR，召回率，检索覆盖率）偏低（0.32），需通过扩大 wiki 覆盖度优化"
-related_to: []
-contradicts: []
-supports: []
+related_to: []  # PATHS ONLY: list paths to documents that ALREADY EXIST in wiki/ (e.g. "wiki/concepts/rag-optimization.md").
+                # DO NOT fill with: concept names ("数字经济"), article titles, or paths to non-existent documents.
+                # If unsure whether a document exists, leave empty ([]).
+contradicts: [] # PATHS ONLY: same rule as related_to.
+supports: []    # PATHS ONLY: same rule as related_to.
 ---
 
 # Title
