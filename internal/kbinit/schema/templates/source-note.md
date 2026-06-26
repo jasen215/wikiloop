@@ -76,11 +76,11 @@ supports: []    # PATHS ONLY: same rule as related_to.
   ALL items MUST be preserved — do NOT summarize, merge, or omit any entry.
   Each item must retain: code/ID, name, source system, storage table names, and any specific technical identifiers.
 
-  TABLE PRESERVATION RULE (MANDATORY):
-  If the source contains Markdown tables (lines starting with |), reproduce those tables
-  VERBATIM in Key Facts. Do NOT convert table rows into prose. Every cell value must
-  appear in the output exactly as in the source. Omitting or summarizing a table is a
-  critical failure.
+  TABLE PRESERVATION RULE (MANDATORY for doc_type=技术规范 only):
+  If this is a technical specification (data dictionary, field catalog, API spec),
+  reproduce ALL Markdown tables VERBATIM in Key Facts. Do NOT convert table rows
+  into prose. Every cell value must appear exactly as in the source.
+  Omitting or summarizing a table in a 技术规范 document is a critical failure.
   Partial preservation is a critical quality failure.
 -->
 
