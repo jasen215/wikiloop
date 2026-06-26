@@ -7,7 +7,7 @@
     <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
     <a href="https://github.com/jasen215/wikiloop/releases"><img src="https://img.shields.io/github/v/release/jasen215/wikiloop" alt="Release"></a>
     <img src="https://img.shields.io/badge/go-1.25+-00ADD8.svg" alt="Go Version">
-    <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-blue" alt="Platform">
+    <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue" alt="Platform">
   </p>
 </div>
 
@@ -118,6 +118,16 @@ Agent 通过 MCP 使用 `kb_search` + `kb_page`。搜索基于纯 FTS（SQLite F
 ```bash
 tar -xzf wikiloop-<version>-linux-amd64.tar.gz -C /path/to/install/
 sudo ln -sf /path/to/install/wikiloop /usr/local/bin/wikiloop
+```
+
+**Windows：** 解压 zip，运行 `wikiloop.exe serve`（或 `wikiloop.exe stdio` 用于 MCP）。将目录加入 `PATH`。无需 CGO，纯 Go 二进制。
+
+**鸿蒙 PC（社区实验性支持）：** WikiLoop 暂无鸿蒙 PC 官方发行包。但由于核心二进制无需 CGO（纯 Go + SQLite），可通过社区 [Harmonybrew](https://harmonybrew.dev) 包管理器在鸿蒙 PC 上原生构建。环境搭建方法参考 [ohos_go_cgo](https://github.com/ohos-go/ohos_go_cgo)。
+
+```bash
+# 在鸿蒙 PC 上（通过 Harmonybrew 安装 Go 后）
+CGO_ENABLED=0 go build -tags fts5 -o wikiloop ./cmd/wikiloop/
+wikiloop serve
 ```
 
 ## 从源码构建
