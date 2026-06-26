@@ -30,6 +30,7 @@
 | **P3** | **32.3 用户反馈驱动 related 权重** | EvoRAG 思路，读取日志提升被读文档权重 | 中（依赖 32.1）|
 | **P3** | **32.5 时序意图检索 boost** | 搜索时感知"最新/当前"等时序词，新文档加权 | 小（与 25.1 合并）|
 | **P3** | **32.6 EvoRAG 反馈权重优化** | 待 query_log 完善后再评估；当前 Agent 行为信号不可靠 | 前置：完善 query_log（小）|
+| **P2** | **32.7 蒸馏 prompt 约束 related_to** | 防止断链重新积累，从源头修复 | 极小（只改 prompt 模板）|
 | **P3** | **13.1 查询反哺 Wiki** | 知识自动增长 | 中 |
 | ~~P2~~ | ~~22.5 Synthesized 聚类合并（Draft 门槛）~~ | ✅ 已完成（draftThreshold=2，_draft/ 机制，2026-06-24） | — |
 | ~~P1~~ | ~~23.7 MCP 接口重设计：kb_search + kb_page~~ | ✅ 已完成（kb_page 新接口 + SearchLayered 分层返回，2026-06-24） | — |
@@ -1489,6 +1490,35 @@ WebUI api.go    → 仅做 HTTP 参数解析 + JSON 响应，调 kb.Service*
 **实现：** `kb_lint` 新增 `missing_concept` 类型警告，扫描 source-note 的 related_to/supports 字段，找指向不存在文档的链接
 
 **改动量：** 小（lint.go 加扫描逻辑）
+
+---
+
+### 32.7 蒸馏 prompt 约束 related_to 只填已有文档路径★★
+
+**状态：** 🔲 待实现
+
+**来源：** 32.2 红链检测实测结果（2026-06-26）
+
+**问题：** 健康检查发现 `related_to` 字段被填入了两类无效内容：
+1. **文章标题**（如"新手做公众号，这5个选题方法就够了"）——LLM 把相关文章标题当成路径写入
+2. **概念名**（如 `"数字经济"`、`"traditional-vector-db-necessity"`）——LLM 写了概念名而非文件路径
+
+这导致每次全量重建后断链重新积累，lint 需要反复清理。
+
+**根本原因：** 蒸馏 prompt 里 `related_to` 字段的说明不够明确，没有限制只能填已存在的文档路径。
+
+**解决方案：** 在 `internal/kbinit/schema/templates/source-note.md` 和蒸馏 prompt 里加一条明确约束：
+
+```
+related_to RULE: Only fill with paths to documents that ALREADY EXIST in the wiki/
+directory (e.g. "wiki/concepts/rag-optimization.md"). Do NOT fill with:
+- Concept names or topic keywords ("数字经济", "RAG")  
+- Article titles ("新手做公众号...")
+- Paths to documents that don't exist yet
+If unsure whether a document exists, leave related_to empty ([]).
+```
+
+**改动量：** 极小（只改 prompt 模板，无代码改动）
 
 ---
 
