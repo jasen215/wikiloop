@@ -69,6 +69,12 @@ preserve EVERY item completely — including its ID/code, name, source system, a
 storage table names (Hive/Iceberg/MatrixDB paths, database.schema.table identifiers).
 Do NOT summarize, merge, or omit any entry. Partial preservation is a critical failure.
 
+TABLE PRESERVATION RULE (MANDATORY for doc_type=技术规范 only): If the document is a
+technical specification (data dictionary, field catalog, API spec, system design doc),
+reproduce ALL Markdown tables verbatim in the Key Facts section. Do NOT convert table
+rows into prose. Every cell value must appear exactly as in the source. Omitting or
+summarizing a table in a 技术规范 document is a critical failure.
+
 ## Quotes
 Notable direct quotes from the document (if any). If none, write "None."
 

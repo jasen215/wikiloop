@@ -464,7 +464,7 @@ func doHTTP(req *http.Request) ([]byte, error) {
 // preserve all precise identifiers for FTS search.
 func isTechnicalCatalog(content string) bool {
 	lines := strings.Split(content, "\n")
-	if len(lines) < 150 {
+	if len(lines) < 50 {
 		return false
 	}
 	// Count numbered entity patterns: M01, M02... or similar coded lists
@@ -472,6 +472,7 @@ func isTechnicalCatalog(content string) bool {
 	tableRe := regexp.MustCompile(`(?i)(iceberg_|dim_|dwd_|hive_|matrixdb|\.im_edge\.)`)
 	numberedCount := 0
 	tableCount := 0
+	tableLineCount := 0
 	for _, line := range lines {
 		if numberedRe.MatchString(line) {
 			numberedCount++
@@ -479,8 +480,14 @@ func isTechnicalCatalog(content string) bool {
 		if tableRe.MatchString(line) {
 			tableCount++
 		}
+		if strings.HasPrefix(strings.TrimSpace(line), "|") {
+			tableLineCount++
+		}
 	}
-	return numberedCount >= 5 || tableCount >= 10
+	// High table density (>30% of lines are table rows) indicates a data dictionary
+	// or field catalog that should be preserved verbatim rather than summarized.
+	tableRatio := float64(tableLineCount) / float64(len(lines))
+	return numberedCount >= 5 || tableCount >= 10 || tableRatio >= 0.30
 }
 
 // lightweightNote generates a source-note without LLM distillation.
