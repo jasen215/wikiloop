@@ -4,7 +4,7 @@
 
 WikiLoop 知识库当前只能通过人工放置文件到 `raw/` 来增长。引入 `kb_add` 工具后，外部 Agent 可以在对话结束时把洞察写入 `raw/insights/`，但这些内容质量参差不齐——有真正有价值的跨文档综合结论，也有无意义的对话记录。
 
-本设计实现一条**异步 LLM 审核流水线**：Agent 通过 `kb_add` 把洞察写入 `raw/insights/`（作为 inbox 目录），由审核 worker 自动搜索知识库验证、评估质量，通过后 promote 到 `raw/reviewed/<分类>/`，触发正式蒸馏。`raw/insights/` 里的文件保留 1 年，不立即删除。
+本设计实现一条**异步 LLM 审核流水线**：Agent 通过 `kb_add` 把洞察写入 `raw/insights/`（作为 inbox 目录），由审核 worker 自动搜索知识库验证、评估质量，通过后 promote 到 `raw/reviewed/<分类>/`，触发正式蒸馏。`voted` 状态的文件保留 3 个月等待同类建议积累，其他状态处理完立即删除。
 
 ---
 
@@ -85,7 +85,7 @@ InsightWorker（后台 goroutine，1个）
        │
        ├─ voted（累计 <2 次，记录投票等待）
        │    ├─ insights_queue 标记 voted（保留 fingerprint + vote_count）
-       │    └─ 保留 raw/insights/<slug>.md（1年后 expired 删除）
+       │    └─ 保留 raw/insights/<slug>.md（3个月后 expired 删除）
        │
        └─ rejected
             ├─ insights_queue 标记 rejected（保留 reason）
@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS insights_queue (
     last_error   TEXT,
     queued_at    INTEGER NOT NULL,
     updated_at   INTEGER NOT NULL,
-    expires_at   INTEGER NOT NULL    -- queued_at + 365天，到期标记 expired 并删除文件
+    expires_at   INTEGER NOT NULL    -- queued_at + 90天（voted状态），到期标记 expired 并删除文件
 );
 
 CREATE INDEX IF NOT EXISTS idx_insights_fingerprint
@@ -265,7 +265,7 @@ type StatusResult struct {
 
 - **同 section 类型**的相似建议计数，跨 section 不累计（因为三类 section 更新知识库的不同部分）
 - 同类建议累计 **≥2 次**时 promote（2 次足以过滤偶发抖动，不需要等 3 次）
-- insights 文件**保留 1 年**后清理（作为历史投票记录，不立即删除）
+- `voted` 状态的文件保留 **3 个月**，3 个月内未累计 ≥2 次则标记 `expired` 删除
 
 ### 实现
 
@@ -275,7 +275,7 @@ type StatusResult struct {
 ALTER TABLE insights_queue ADD COLUMN section_type TEXT;   -- link | synthesis | external
 ALTER TABLE insights_queue ADD COLUMN fingerprint TEXT;    -- 建议的语义指纹（LLM 生成的 slug）
 ALTER TABLE insights_queue ADD COLUMN vote_count INTEGER NOT NULL DEFAULT 1;
-ALTER TABLE insights_queue ADD COLUMN expires_at INTEGER; -- queued_at + 365天
+ALTER TABLE insights_queue ADD COLUMN expires_at INTEGER; -- queued_at + 90天
 ```
 
 InsightReviewer 处理流程变更：
@@ -302,7 +302,7 @@ voted       → 已记录投票，等待累计（保留文件）
 promoted    → 已 promote（写入 raw/reviewed/）
 rejected    → 审核不通过（删除文件）
 failed      → 重试耗尽
-expired     → 超过 1 年清理
+expired     → voted 超过 3 个月未累计到阈值，清理
 ```
 
 ### 清理策略
@@ -311,10 +311,10 @@ expired     → 超过 1 年清理
 |------|---------|------|
 | `promoted` | **立即删除** | 内容已进入 `raw/reviewed/` 并触发蒸馏，原文使命完成 |
 | `rejected` | **立即删除** | 审核不通过，内容无价值 |
-| `voted` | **保留 1 年**，到期标记 `expired` 后删除 | 还在等待同类建议累计，文件是投票记录的载体 |
+| `voted` | **保留 3 个月**，到期标记 `expired` 后删除 | 还在等待同类建议累计，3 个月内无第二次观察则视为不够普遍 |
 | `failed` | **保留至重试耗尽**（3次），之后立即删除 | 重试阶段需要原文件 |
 
-保留 1 年只针对 `voted` 状态——这是唯一需要跨会话积累的状态。
+保留 3 个月只针对 `voted` 状态——这是唯一需要跨会话积累的状态。
 
 - `kb_lint` 输出 `voted` 类建议的当前计数，方便查看哪些建议正在积累中
 
