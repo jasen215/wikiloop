@@ -91,6 +91,52 @@ kb_lint（或 kb_reindex 后自动运行）
 
 ---
 
+## 实现机制：纯 SQL，两次查询
+
+断链比较是直接的字符串相等：`links.target_doc_id` 与 `documents.id`（文档路径）做 LEFT JOIN，匹配不到即为断链。
+
+**第一步：SELECT 拿断链列表（分类）**
+
+```sql
+SELECT
+    l.rowid,
+    l.relation,
+    l.source_doc_id,
+    l.target_doc_id,
+    CASE
+        WHEN trim(l.target_doc_id) = ''
+          OR l.target_doc_id LIKE '#%'
+          OR l.target_doc_id LIKE '[%'      THEN 'placeholder'
+        WHEN instr(l.target_doc_id, '/') > 0 THEN 'path'
+        ELSE                                      'concept'
+    END AS link_type
+FROM links l
+LEFT JOIN documents d ON d.id = l.target_doc_id
+WHERE l.relation IN ('related_to', 'supports', 'contradicts')
+  AND d.id IS NULL;
+```
+
+Go 代码遍历结果：
+- `placeholder` → 静默跳过（只删除）
+- `path` → 生成 `LintWarning{Kind: "broken_related"}`
+- `concept` → 累计到 `RedLink` map，生成 `LintWarning{Kind: "missing_concept"}`
+
+**第二步：DELETE 一次性清理所有断链**
+
+```sql
+DELETE FROM links
+WHERE relation IN ('related_to', 'supports', 'contradicts')
+  AND id NOT IN (
+      SELECT l.id FROM links l
+      JOIN documents d ON d.id = l.target_doc_id
+      WHERE l.relation IN ('related_to', 'supports', 'contradicts')
+  );
+```
+
+整个逻辑只需两次 SQL，Go 层只做结果聚合和 JSON 写入。
+
+---
+
 ## 组件设计
 
 ### 1. `internal/kb/lint.go`（改动）
@@ -104,28 +150,14 @@ kb_lint（或 kb_reindex 后自动运行）
 ```go
 // cleanBrokenLinks 扫描 links 表，清理三种断链。
 // 返回概念名断链列表（用于写入 red_links.json）。
-func cleanBrokenLinks(db *sql.DB, kbRoot string) ([]RedLink, error)
+func cleanBrokenLinks(db *sql.DB) ([]RedLink, []LintWarning, int, int, error)
+// 返回值：redLinks, warnings, brokenPathCount, placeholderCount, err
 
 // RedLink 代表一个被引用但尚未创建页面的概念。
 type RedLink struct {
     Concept      string   `json:"concept"`
     Count        int      `json:"count"`
     ReferencedBy []string `json:"referenced_by"`
-}
-```
-
-判断逻辑：
-
-```go
-func classifyTarget(target string) string {
-    t := strings.TrimSpace(target)
-    if t == "" || strings.HasPrefix(t, "#") || strings.HasPrefix(t, "[") {
-        return "placeholder"
-    }
-    if strings.Contains(t, "/") {
-        return "path"
-    }
-    return "concept"
 }
 ```
 
@@ -183,7 +215,7 @@ type LintResult struct {
 
 | 文件 | 类型 | 改动说明 |
 |------|------|----------|
-| `internal/kb/lint.go` | 改动 | 新增 `cleanBrokenLinks`、`RedLink`、`classifyTarget`，扩展 `LintWarning.Kind` |
+| `internal/kb/lint.go` | 改动 | 新增 `cleanBrokenLinks`、`RedLink`，扩展 `LintWarning.Kind`；分类逻辑在 SQL CASE 里 |
 | `internal/kb/service.go` | 改动 | `KBLint` 调用 `cleanBrokenLinks`，写 red_links.json，`LintResult` 新增字段 |
 | `internal/webui/api.go` | 改动 | 新增 `GET/DELETE /api/red-links` |
 | `internal/webui/static/` | 改动 | lint 页面增加红链展示区块 |
