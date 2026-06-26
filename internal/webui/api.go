@@ -255,7 +255,7 @@ func (s *Server) handleRedLinks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		data, err := os.ReadFile(jsonPath)
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			writeJSON(w, map[string]interface{}{"red_links": []interface{}{}, "count": 0})
 			return
 		}
@@ -277,7 +277,7 @@ func (s *Server) handleRedLinks(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data, err := os.ReadFile(jsonPath)
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			writeJSON(w, map[string]interface{}{"ok": true})
 			return
 		}
@@ -296,7 +296,11 @@ func (s *Server) handleRedLinks(w http.ResponseWriter, r *http.Request) {
 				filtered = append(filtered, l)
 			}
 		}
-		out, _ := json.Marshal(filtered)
+		out, err := json.Marshal(filtered)
+		if err != nil {
+			kbErrToHTTP(w, &kb.KBError{Code: 500, Message: "marshal red_links: " + err.Error()})
+			return
+		}
 		if err := os.WriteFile(jsonPath, out, 0o644); err != nil {
 			kbErrToHTTP(w, &kb.KBError{Code: 500, Message: err.Error()})
 			return
