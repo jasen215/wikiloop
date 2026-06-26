@@ -37,7 +37,7 @@
 | **P4** | **27.1 鸿蒙 PC 平台支持** | 原生运行于 HarmonyOS NEXT PC | 大（等待 Go 官方支持）|
 | ~~P2~~ | ~~28.1 kb_ingest MCP 工具~~ | ✅ 已完成（kb_add + stdio 子命令，2026-06-25） | — |
 | ~~P2~~ | ~~29.1 蒸馏队列（持久化 + 并发 + 重试）~~ | ✅ 已完成（SQLite 队列 + 3 worker goroutine + 指数退避，2026-06-25） | — |
-| **P2** | **25.1 知识衰退字段（review_after）** | 避免 AI 读到过时决策/概念页 | 小（加字段 + kb_lint 检测） |
+| ~~P2~~ | ~~25.1 知识衰退字段（review_after）~~ | 降级为 P3，现阶段价值有限（见 §25.1 分析） | — |
 | ~~P2~~ | ~~25.2 MCP 工具分档（agent/admin）~~ | ✅ 已完成（MCP 只暴露 kb_search/kb_page/kb_add，admin 工具只在 WebUI/CLI）| — |
 | **P2** | **26.1 WITH RECURSIVE 多跳图查询** | Agent 能追踪 2-3 跳外的关联文档（⚠️ 依赖 19.1 先完成）| 小（改 graph.go GraphExpand） |
 | **P2** | **26.2 预训练词向量 bake-in 轻量向量** | 零依赖重引入向量能力，30MB 内 | 中（embed + SQLite 自定义函数） |
@@ -1137,10 +1137,13 @@ OKF（Open Knowledge Format）v0.1 是 WikiLoop 遵循的上游规范。**原则
 
 ### 25.2 值得 WikiLoop 借鉴的三条建议
 
-**P2 — 知识衰退字段（`review_after`）**
+**~~P2~~ → P3 — 知识衰退字段（`review_after`）**
 - Engram 按知识类型自动计算过期时间，到期触发 review
 - WikiLoop 建议：`documents` 表加 `reviewed_at INTEGER` + `review_after INTEGER`，`kb_lint` 附带检测过期页
 - 价值：避免 AI 读到过时的 decision/concept 页，尤其技术决策类页面
+- **2026-06-26 分析结论：现阶段价值有限，降为 P3 暂不实施。**
+  原因：① `doc_timestamp` 已有，搜索时已做时间衰减 boost；② 知识库规模小（170 篇 decision），人工 review 成本低于自动化；③ WikiLoop 知识时效性远低于 Engram 的记忆时效性，6-12 月过期规则不适合；④ 蒸馏 prompt 没有 `review_after` 填写规则，实际会大量空值，lint 报警无意义。
+  真正有用的做法：仅对 `doc_type: 技术规范` 和 `wiki/decisions/` 加检测，需先改蒸馏 prompt，改动范围超出 lint.go 单文件。
 
 **P2 — MCP 工具分档（`--tools=agent/admin`）**
 - Engram 将 19 个工具拆为 agent 档（常用读写）和 admin 档（维护），减少 agent context 噪音
