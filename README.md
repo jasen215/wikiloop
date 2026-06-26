@@ -291,23 +291,6 @@ If markitdown is unavailable, agents can extract text themselves (using LLM visi
 
 **3. MCP configuration:**
 
-Claude Code (`~/.claude.json`):
-
-```json
-{
-  "mcpServers": {
-    "wikiloop": {
-      "command": "/root/.openclaw/wikiloop/wikiloop",
-      "args": ["stdio"],
-      "env": {
-        "WIKILOOP_KB": "/root/.openclaw/wikiloop-kb",
-        "PATH": "/root/.openclaw/workspace/bin:/usr/local/bin:/usr/bin:/bin"
-      }
-    }
-  }
-}
-```
-
 Hermes (`mcp_servers` in agent config):
 
 ```yaml

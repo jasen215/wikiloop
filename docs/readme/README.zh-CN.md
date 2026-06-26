@@ -321,29 +321,13 @@ chmod +x /root/.openclaw/wikiloop/wikiloop
 
 **2. MCP 配置：**
 
-Claude Code (`~/.claude.json`)：
-
-```json
-{
-  "mcpServers": {
-    "wikiloop": {
-      "command": "/root/.openclaw/wikiloop/wikiloop",
-      "args": ["serve"],
-      "env": {
-        "WIKILOOP_KB": "/root/.openclaw/wikiloop-kb"
-      }
-    }
-  }
-}
-```
-
 Hermes (`mcp_servers` in agent config)：
 
 ```yaml
 mcp_servers:
   wikiloop:
     command: /root/.openclaw/wikiloop/wikiloop
-    args: [serve]
+    args: [stdio]
     env:
       WIKILOOP_KB: /root/.openclaw/wikiloop-kb
 ```
