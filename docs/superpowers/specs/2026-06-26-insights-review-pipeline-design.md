@@ -140,19 +140,6 @@ if strings.HasPrefix(rel, "insights"+string(filepath.Separator)) {
 
 ### 3. `internal/watcher/watcher.go`（改动）
 
-`raw/insights/` 路径只触发 FTS 索引，不进 `distill_queue`：
-
-```go
-if strings.HasPrefix(rel, "insights/") {
-    // 只索引，不蒸馏
-    kb.IndexFiles(db, kbRoot)
-    return
-}
-// 原有逻辑
-```
-
-### 4. watcher（改动）
-
 `raw/insights/` 路径**跳过所有处理**（不索引、不蒸馏）：
 
 ```go
