@@ -75,17 +75,21 @@ Agent 对话结束
 
 InsightWorker（后台 goroutine，1个）
   └─ 取 insights_queue pending 任务
-       ├─ FTS 搜索知识库，找相关 source-note 作为参考资料
-       ├─ 调 LLM 审核（准确性 + 必要性 + 质量 + 分类）
+       ├─ FTS 搜索知识库（参考资料 ≤5 篇）+ 搜索 raw/insights/（历史 ≤5 篇）
+       ├─ 调 LLM 审核 → 输出 section_type + fingerprint + promote/vote/reject
        │
-       ├─ promote=true
-       │    ├─ 写入 raw/reviewed/<category>/<slug>.md（格式化后的标准内容）
+       ├─ promote（同 fingerprint+section_type 累计 ≥2 次）
+       │    ├─ 写入 raw/reviewed/<category>/<slug>.md
        │    ├─ distill_queue 入队（触发正式蒸馏）
-       │    └─ 删除 raw/insights/<slug>.md
+       │    └─ 删除 raw/insights/<slug>.md（立即）
        │
-       └─ promote=false
+       ├─ voted（累计 <2 次，记录投票等待）
+       │    ├─ insights_queue 标记 voted（保留 fingerprint + vote_count）
+       │    └─ 保留 raw/insights/<slug>.md（1年后 expired 删除）
+       │
+       └─ rejected
             ├─ insights_queue 标记 rejected（保留 reason）
-            └─ 删除 raw/insights/<slug>.md
+            └─ 删除 raw/insights/<slug>.md（立即）
 ```
 
 ---
@@ -303,8 +307,15 @@ expired     → 超过 1 年清理
 
 ### 清理策略
 
-- `promoted` / `rejected` 文件：审核完成后**保留原文件 1 年**再删除
-- `voted` 文件：等待同类建议累计，1 年内未达到 ≥2 次则标记 `expired` 并删除
+| 状态 | 文件处理 | 理由 |
+|------|---------|------|
+| `promoted` | **立即删除** | 内容已进入 `raw/reviewed/` 并触发蒸馏，原文使命完成 |
+| `rejected` | **立即删除** | 审核不通过，内容无价值 |
+| `voted` | **保留 1 年**，到期标记 `expired` 后删除 | 还在等待同类建议累计，文件是投票记录的载体 |
+| `failed` | **保留至重试耗尽**（3次），之后立即删除 | 重试阶段需要原文件 |
+
+保留 1 年只针对 `voted` 状态——这是唯一需要跨会话积累的状态。
+
 - `kb_lint` 输出 `voted` 类建议的当前计数，方便查看哪些建议正在积累中
 
 ---
