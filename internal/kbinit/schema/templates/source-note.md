@@ -75,6 +75,12 @@ supports: []    # PATHS ONLY: same rule as related_to.
   If the source contains numbered/coded items (e.g. M01-M43, API list, field catalog),
   ALL items MUST be preserved — do NOT summarize, merge, or omit any entry.
   Each item must retain: code/ID, name, source system, storage table names, and any specific technical identifiers.
+
+  TABLE PRESERVATION RULE (MANDATORY):
+  If the source contains Markdown tables (lines starting with |), reproduce those tables
+  VERBATIM in Key Facts. Do NOT convert table rows into prose. Every cell value must
+  appear in the output exactly as in the source. Omitting or summarizing a table is a
+  critical failure.
   Partial preservation is a critical quality failure.
 -->
 
