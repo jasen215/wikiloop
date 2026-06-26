@@ -96,16 +96,24 @@ InsightWorker（后台 goroutine，1个）
 
 ```sql
 CREATE TABLE IF NOT EXISTS insights_queue (
-    path        TEXT PRIMARY KEY,          -- raw/ 相对路径，如 insights/2026-06-26-xxx.md
-    status      TEXT NOT NULL DEFAULT 'pending',  -- pending | processing | promoted | rejected
-    category    TEXT,                      -- LLM 分配的分类，如 references、wechat-tech
-    reviewed_path TEXT,                    -- promote 后的目标路径，如 reviewed/references/xxx.md
-    reason      TEXT,                      -- LLM 审核理由（promoted 或 rejected 均填写）
-    retry_count INTEGER NOT NULL DEFAULT 0,
-    last_error  TEXT,
-    queued_at   INTEGER NOT NULL,
-    updated_at  INTEGER NOT NULL
+    path         TEXT PRIMARY KEY,   -- raw/ 相对路径，如 insights/2026-06-26-xxx.md
+    status       TEXT NOT NULL DEFAULT 'pending',
+                                     -- pending | processing | voted | promoted | rejected | failed | expired
+    section_type TEXT,               -- link | synthesis | external（LLM 审核后填写）
+    fingerprint  TEXT,               -- 建议语义指纹（LLM 生成，如 "related_to::A-B"）
+    vote_count   INTEGER NOT NULL DEFAULT 1,  -- 同 fingerprint+section_type 的累计次数
+    category     TEXT,               -- LLM 分配的分类，如 references、insights-synthesis
+    reviewed_path TEXT,              -- promote 后的目标路径
+    reason       TEXT,               -- LLM 审核理由
+    retry_count  INTEGER NOT NULL DEFAULT 0,
+    last_error   TEXT,
+    queued_at    INTEGER NOT NULL,
+    updated_at   INTEGER NOT NULL,
+    expires_at   INTEGER NOT NULL    -- queued_at + 365天，到期标记 expired 并删除文件
 );
+
+CREATE INDEX IF NOT EXISTS idx_insights_fingerprint
+    ON insights_queue(fingerprint, section_type);
 ```
 
 ### 2. `internal/distill/insights.go`（新文件，~150 行）
@@ -245,6 +253,62 @@ type StatusResult struct {
 
 ---
 
+## 投票机制：防止 LLM 抖动
+
+单次 LLM 输出不可靠（抖动、幻觉、偶发错误），同一类建议需要被**多次独立观察**才 promote。
+
+### 规则
+
+- **同 section 类型**的相似建议计数，跨 section 不累计（因为三类 section 更新知识库的不同部分）
+- 同类建议累计 **≥2 次**时 promote（2 次足以过滤偶发抖动，不需要等 3 次）
+- insights 文件**保留 1 年**后清理（作为历史投票记录，不立即删除）
+
+### 实现
+
+`insights_queue` 表新增字段：
+
+```sql
+ALTER TABLE insights_queue ADD COLUMN section_type TEXT;   -- link | synthesis | external
+ALTER TABLE insights_queue ADD COLUMN fingerprint TEXT;    -- 建议的语义指纹（LLM 生成的 slug）
+ALTER TABLE insights_queue ADD COLUMN vote_count INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE insights_queue ADD COLUMN expires_at INTEGER; -- queued_at + 365天
+```
+
+InsightReviewer 处理流程变更：
+
+```
+取 insights_queue pending 任务
+  └─ FTS 搜索知识库（参考资料，≤5 篇）
+  └─ FTS 搜索 raw/insights/（历史 insights，≤5 篇）
+  └─ 调 LLM 审核，新增输出字段：
+       section_type: "link" | "synthesis" | "external"
+       fingerprint:  建议的语义指纹（如 "related_to::A-B", "synthesis::FTS优于向量"）
+  └─ 写回 insights_queue（section_type + fingerprint）
+  └─ 查询：同 fingerprint + 同 section_type 的 promoted=false 记录数
+       count >= 2 → promote（写入 raw/reviewed/ + 触发蒸馏）
+       count < 2  → 标记 voted（等待下次同类建议）
+```
+
+### `insights_queue` status 扩展
+
+```
+pending     → 待审核
+processing  → 审核中
+voted       → 已记录投票，等待累计（保留文件）
+promoted    → 已 promote（写入 raw/reviewed/）
+rejected    → 审核不通过（删除文件）
+failed      → 重试耗尽
+expired     → 超过 1 年清理
+```
+
+### 清理策略
+
+- `promoted` / `rejected` 文件：审核完成后**保留原文件 1 年**再删除
+- `voted` 文件：等待同类建议累计，1 年内未达到 ≥2 次则标记 `expired` 并删除
+- `kb_lint` 输出 `voted` 类建议的当前计数，方便查看哪些建议正在积累中
+
+---
+
 ## 关键边界与约束
 
 **insights 目录不触发正式蒸馏：**
@@ -257,10 +321,10 @@ type StatusResult struct {
 避免并发写同名文件冲突。insights 审核不是高吞吐场景，1 个 worker 足够。
 
 **FTS 搜索参考资料上限 5 篇：**
-超过 5 篇 prompt 过长，LLM 可能忽略后半部分。取 BM25 top-5 摘要（title + description + snippet）即可，不需要全文。
+超过 5 篇 prompt 过长，LLM 可能忽略后半部分。取 BM25 top-5（知识库参考）+ top-5（历史 insights）各自搜索，分两段注入 prompt。
 
-**promote 失败不重试超过 3 次：**
-3 次均失败（LLM API 不可用等）后标记 `failed`，原文件删除（insights 是 inbox，不值得无限保留）。
+**重试上限 3 次：**
+3 次均失败（LLM API 不可用等）后标记 `failed`，原文件保留至 expires_at 再删除。
 
 ---
 
