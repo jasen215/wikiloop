@@ -85,9 +85,9 @@ InsightWorker（定时，每周一次）
 func RunInsightWorker(ctx context.Context, cfg Config, kbRoot string)
 
 // reviewInsightFile 审核单个文件。
-// 返回 (category, formattedContent, skip, err)
-// skip=true 表示无增量价值，直接跳过。
-func reviewInsightFile(cfg Config, kbRoot string, path string) (string, string, bool, error)
+// 返回 (skip, category, formattedContent, err)
+// skip=true 时 category/formattedContent 为空，文件直接删除。
+func reviewInsightFile(cfg Config, kbRoot string, path string) (bool, string, string, error)
 ```
 
 **LLM prompt 结构：**
@@ -113,7 +113,7 @@ func reviewInsightFile(cfg Config, kbRoot string, path string) (string, string, 
 2. 综合结论有新角度，现有 concept/comparison/decision 页未覆盖
 3. 包含知识库以外的具体数据或事实
 
-不符合以上任一条件（如：仅是已有综合页的重新组织）→ skip
+不符合以上任一条件，或有任何不确定时 → skip（宁可不用，不要用错）
 
 输出 JSON：
 {
