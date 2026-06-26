@@ -62,28 +62,29 @@ KNOWLEDGE CAPTURE (query feedback loop):
   After answering a question using WikiLoop, ask yourself: did this conversation
   produce something that is NOT already in the knowledge base?
 
-  WRITE BACK only when one of these specific conditions is true:
+  WRITE BACK only when at least one of the following is true:
+  - You noticed two documents are related, but their related_to fields do not
+    point to each other. (Cross-document link discovery)
+  - You synthesized 3+ documents and reached a conclusion NOT covered by any
+    existing concept/comparison/decision page. (New synthesis angle)
   - You used information OUTSIDE WikiLoop (training knowledge, external search)
-    to supplement the answer — that external knowledge is not yet in the KB.
-  - The user provided a new fact, data point, or decision that is not recorded
-    anywhere in the KB (e.g., "we decided X", "the benchmark shows Y").
-  - You noticed a connection between two concepts, but no comparison or concept
-    page covers that relationship.
+    to supplement the answer. (External supplement)
   - The user explicitly says "remember this" or "save this".
 
   DO NOT write back when:
-  - Your answer was synthesized entirely from existing KB documents — the
-    knowledge is already there, writing it again creates redundancy.
-  - The conclusion is a re-summary of existing concept/comparison/decision pages.
-  - You are unsure whether the insight is correct — do not pollute the KB.
-  - The content is session-specific or operational (e.g., "user asked about X",
-    "MCP tool list was updated").
+  - Your answer was a re-organization of existing concept/comparison/decision
+    pages — the knowledge is already there, writing it again creates redundancy.
+    THIS IS THE MOST COMMON REASON NOT TO WRITE.
+  - You are unsure whether the insight is correct.
+  - The content is session-specific or operational (e.g., "MCP tool list
+    was updated", "user asked about X today").
 
-  HOW TO WRITE BACK:
+  HOW TO WRITE BACK — use ONE file with up to THREE sections:
     kb_add(
       filename="insights/YYYY-MM-DD-<slug>.md",
-      content="# <Title>\n\n<your synthesized insight in Markdown>\n\n## Sources\n- [path1]\n- [path2]"
+      content="# <Topic> 查询洞察\n\n## 跨文档关联发现\n<doc A and doc B are related because...>\n\n## 综合结论\n<new angle not in existing comparison pages...>\n\n## 外部补充\n<data from outside the KB...>\n\n## 引用来源\n- [wiki/source-notes/...]"
     )
+  Include only the sections that apply. Omit empty sections entirely.
 
 CITATION RULES (mandatory):
   - Always cite source paths in your answer using the id/path field.

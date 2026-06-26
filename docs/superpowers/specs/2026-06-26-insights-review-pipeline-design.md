@@ -8,6 +8,61 @@ WikiLoop 知识库当前只能通过人工放置文件到 `raw/` 来增长。引
 
 ---
 
+## insights 对知识库的价值定位
+
+基于知识库实际数据分析，知识库存在三类不足，insights 对每类的价值不同：
+
+| 不足类型 | 现状数据 | insights 价值 |
+|---------|---------|--------------|
+| **综合不足** | 1187 个综合页中 55% 仅引用 ≤2 篇 source-note，平均引用 2.6 篇 | ✅ 高：Agent 的跨文档综合结论直接补充综合页 sources |
+| **文章关系不足** | 518 篇 source-note 之间 related_to 仅 39 条（平均每篇 0.08 条） | ✅ 高：Agent 发现文档间关联，补充 related_to 字段 |
+| **内容不足** | 局部话题缺失（MemOS、新工具等） | ⚠️ 低：内容缺口靠新增原始文章，不靠 insights |
+
+**结论：insights 的核心价值是弥补综合不足和关系不足，而不是补充原始内容。**
+
+---
+
+## insights 文件格式：一文件三 section
+
+Agent 回答一个问题后，把所有发现写入**同一个文件**，按三类发现分 section。同一次对话上下文的内容放在一起，InsightReviewer 能看到完整语境，分类处理每个 section。
+
+```markdown
+# [问题主题] 查询洞察
+
+## 跨文档关联发现
+<!-- Agent 发现了两篇文档之间的关联，但它们的 related_to 字段未互指 -->
+- [wiki/source-notes/A.md] 和 [wiki/source-notes/B.md] 在 X 概念上有直接关联
+
+## 综合结论
+<!-- Agent 综合了 3 篇以上文档，得出现有 comparison/concept 页没有覆盖的新角度 -->
+综合 A、B、C 三篇关于 X 的内容，得出：...
+
+## 外部补充
+<!-- Agent 使用了知识库以外的信息（训练知识、外部搜索）补充了回答 -->
+论文 X 的实验数据显示：...（来源：训练知识）
+
+## 引用来源
+- [wiki/source-notes/...]
+- [wiki/source-notes/...]
+```
+
+**三类 section 的触发条件（写入 serverInstructions）：**
+
+| Section | 何时写 | 不写的情况 |
+|---------|--------|----------|
+| **跨文档关联发现** | 发现两篇文档在某概念上相关，但 related_to 未互指 | 已有 comparison 页覆盖了这个关系 |
+| **综合结论** | 综合 ≥3 篇文档，得出现有综合页没有的新角度 | 回答完全复述了已有 concept/comparison 页的内容 |
+| **外部补充** | 使用了知识库以外的信息（训练知识/外部搜索） | 回答完全来自知识库已有文档 |
+
+**不需要写 insights 的最常见情况：** Agent 的回答是对知识库已有 comparison/concept/decision 页的重新组织——这类内容知识库里已有，写入只会造成冗余。
+
+InsightReviewer 按 section 差异化处理：
+- **跨文档关联** → 验证两篇文档确实存在且关联合理 → promote 后蒸馏时补充 related_to
+- **综合结论** → 验证现有综合页确实未覆盖该角度 → promote 为新综合页或补充已有页的 sources
+- **外部补充** → 验证内容准确性 → promote 为新 source-note（`raw/reviewed/<category>/`）
+
+---
+
 ## 整体数据流
 
 ```
@@ -87,27 +142,31 @@ func ReviewInsight(cfg Config, kbRoot string, insightPath string) (bool, string,
 
 ## 审核任务
 
-请根据以下标准评估：
+该 insights 文件包含最多三类 section，请分别评估每个存在的 section：
 
-1. **准确性**：与参考资料是否一致？有无明显错误或与已知事实矛盾？
-2. **必要性**：知识库中是否已有等价内容？若已有，该洞察是否有显著补充？
-3. **质量**：内容是否具体、有价值？排除以下无意义内容：
-   - 纯粹的对话记录（"今天讨论了X"）
-   - 无具体结论的泛泛总结
-   - 字数少于 100 字的片段
-4. **分类**：适合放在 raw/reviewed/ 的哪个子目录？常见分类：
-   - references（技术参考、方法论）
-   - wechat-tech（微信公众号技术文章）
-   - insights-synthesis（跨文档综合结论）
-   - decisions（技术决策记录）
-   - project（项目文档、会议纪要）
+**§ 跨文档关联发现**（若存在）
+- 验证提到的两篇文档在知识库中确实存在
+- 判断关联是否合理（非牵强）
+- 判断现有综合页是否已覆盖这个关系
+- 若有价值：输出需要补充 related_to 的文档对
+
+**§ 综合结论**（若存在）
+- 判断是否完全是对已有 concept/comparison 页的重复组织
+- 若是重复 → reject（这是最常见的 reject 原因）
+- 若有新角度：判断应补充到哪个现有综合页，还是新建一个
+
+**§ 外部补充**（若存在）
+- 验证内容与知识库参考资料是否一致，有无矛盾
+- 判断是否有具体数据/事实（排除泛泛总结）
+- 若有价值：确定写入 raw/reviewed/ 的子目录
 
 请输出 JSON（不要包含在代码块中）：
 {
   "promote": true 或 false,
   "reason": "一句话说明原因",
-  "category": "子目录名（仅 promote=true 时填写，否则空字符串）",
-  "formatted_content": "重新格式化为标准 Markdown 的完整内容（仅 promote=true 时填写，否则空字符串）"
+  "category": "子目录名（仅 promote=true 时填写）：references | insights-synthesis | decisions | project",
+  "related_to_pairs": [["doc_a_path", "doc_b_path"]],  // 跨文档关联发现，空数组表示无
+  "formatted_content": "重新格式化为标准 Markdown（仅 promote=true 且有外部补充或综合结论时填写，否则空字符串）"
 }
 ```
 
