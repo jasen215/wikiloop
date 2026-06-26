@@ -40,7 +40,7 @@
 | ~~P2~~ | ~~29.1 蒸馏队列（持久化 + 并发 + 重试）~~ | ✅ 已完成（SQLite 队列 + 3 worker goroutine + 指数退避，2026-06-25） | — |
 | ~~P2~~ | ~~25.1 知识衰退字段（review_after）~~ | 降级为 P3，现阶段价值有限（见 §25.1 分析） | — |
 | ~~P2~~ | ~~25.2 MCP 工具分档（agent/admin）~~ | ✅ 已完成（MCP 只暴露 kb_search/kb_page/kb_add，admin 工具只在 WebUI/CLI）| — |
-| **P2** | **26.1 WITH RECURSIVE 多跳图查询** | Agent 能追踪 2-3 跳外的关联文档（⚠️ 依赖 19.1 先完成）| 小（改 graph.go GraphExpand） |
+| ~~P2~~ | ~~26.1 WITH RECURSIVE 多跳图查询~~ | 降级为 P3：links 表数据太稀疏，TagExpand 已覆盖多跳需求；等 related_to 积累后再评估 | — |
 | **P2** | **26.2 预训练词向量 bake-in 轻量向量** | 零依赖重引入向量能力，30MB 内 | 中（embed + SQLite 自定义函数） |
 | **P3** | **25.3 normalized_hash 语义去重** | 防止 FTS 索引膨胀 | 小（升级 content_hash 语义） |
 | ~~P2~~ | ~~31.1 kb 业务逻辑统一层（kbsvc）~~ | ✅ 已完成（service.go + KBError + 薄包装，2026-06-25，PR #14）| — |
@@ -1207,12 +1207,12 @@ OKF（Open Knowledge Format）v0.1 是 WikiLoop 遵循的上游规范。**原则
 
 ### 26.3 对 WikiLoop 的价值（按优先级）
 
-**P2 — WITH RECURSIVE CTE 实现多跳图查询**
+**~~P2~~ → P3 — WITH RECURSIVE CTE 实现多跳图查询**
 - codebase-memory-mcp 用 SQL 递归 CTE 实现多跳 BFS，不需要图数据库
-- WikiLoop 现在 GraphExpand 只做 1 跳，改成 `WITH RECURSIVE` 即可实现多跳，和 19.1 SAG 探索项高度契合
+- WikiLoop 现在 GraphExpand 只做 1 跳，改成 `WITH RECURSIVE` 即可实现多跳
 - 改动范围：`internal/kb/graph.go` 的 `GraphExpand` 函数
-- 价值：Agent 找到一篇文章后能顺着关系链追踪到 2-3 跳外的相关文档
-- **⚠️ 依赖 19.1 SAG 先完成：** 当前 `related_to` 只有 37 条（1678 篇文档），多跳收益极低。19.1 SAG 建立实体关联后，`related_to` 密度大幅提升，多跳才有实质价值。**建议先做 19.1，再做 26.1。**
+- **2026-06-26 分析结论：降为 P3，现阶段收益接近零。**
+  原因：① links 表断链刚被清理（32.2），有效 related_to 极少；② TagExpand 已通过 document_tags claim 实体实现多跳，功能上已覆盖；③ 等 32.7 蒸馏约束生效、links 表积累有效 related_to 后再重新评估。
 
 **P2 — 预训练词向量 bake-in + RI fallback 的轻量向量方案**
 - 把多语言预训练词向量（如 fastText multilingual，覆盖中英文）int8 量化后用 `//go:embed` 编译进 Go 二进制
