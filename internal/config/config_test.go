@@ -178,6 +178,14 @@ func TestSetUIField_InvalidLanguage(t *testing.T) {
 	}
 }
 
+func TestSetUIField_RejectsLegacyZh(t *testing.T) {
+	cfg := &Config{UI: UIConfig{Language: "en"}}
+	setUIField(cfg, "language", "zh")
+	if cfg.UI.Language != "en" {
+		t.Errorf("legacy 'zh' should be rejected by setUIField, got %q", cfg.UI.Language)
+	}
+}
+
 func TestLoad_MigratesOldZh(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")

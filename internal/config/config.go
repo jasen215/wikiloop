@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -139,7 +140,10 @@ func Load(kbRoot string) (*Config, error) {
 	}
 
 	configPath := filepath.Join(kbRoot, "config.yaml")
-	if _, err := os.Stat(configPath); err == nil {
+	var hasLegacyZh bool
+	if rawData, err := os.ReadFile(configPath); err == nil {
+		hasLegacyZh = bytes.Contains(rawData, []byte(`language: "zh"`)) ||
+			bytes.Contains(rawData, []byte("language: zh"))
 		if err := parseYAML(configPath, cfg); err != nil {
 			return nil, fmt.Errorf("parse config.yaml: %w", err)
 		}
@@ -181,12 +185,13 @@ func Load(kbRoot string) (*Config, error) {
 	}
 
 	if cfg.UI.Language == "" {
-		cfg.UI.Language = detectSystemLanguage()
+		if hasLegacyZh {
+			// Migrate legacy "zh" (rejected by setUIField) to "zh-CN"
+			cfg.UI.Language = "zh-CN"
+		} else {
+			cfg.UI.Language = detectSystemLanguage()
+		}
 		_ = Save(kbRoot, cfg) // best-effort write; ignore error
-	} else if cfg.UI.Language == "zh" {
-		// Migrate old "zh" to "zh-CN" (one-time, write back to config.yaml)
-		cfg.UI.Language = "zh-CN"
-		_ = Save(kbRoot, cfg)
 	}
 
 	return cfg, nil
@@ -310,7 +315,6 @@ func setUIField(cfg *Config, key, val string) {
 		valid := map[string]bool{
 			"en": true, "zh-CN": true, "zh-TW": true,
 			"ru": true, "de": true, "fr": true, "es": true, "ko": true,
-			"zh": true, // legacy value accepted for migration in Load()
 		}
 		if valid[val] {
 			cfg.UI.Language = val
