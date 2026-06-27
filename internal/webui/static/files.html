@@ -62,6 +62,9 @@
 
 
 <script>
+let dict = {};
+function t(key) { return dict[key] || key; }
+
 const PAGE_SIZE = 10;
 let allFiles = [];
 let currentPage = 1;
@@ -215,7 +218,7 @@ async function applyI18n() {
     lang = cfg?.ui?.language || "en";
   } catch (_) {}
 
-  let dict = {};
+  dict = {};
   try {
     const res = await fetch("/static/i18n/" + lang + ".json");
     dict = await res.json();

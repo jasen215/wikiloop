@@ -83,6 +83,9 @@
 
 
 <script>
+let dict = {};
+function t(key) { return dict[key] || key; }
+
 function fmtSize(bytes) {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
@@ -246,7 +249,7 @@ async function applyI18n() {
     lang = cfg?.ui?.language || "en";
   } catch (_) {}
 
-  let dict = {};
+  dict = {};
   try {
     const res = await fetch("/static/i18n/" + lang + ".json");
     dict = await res.json();
