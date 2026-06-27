@@ -53,6 +53,5 @@ internal/embed/models/
 **/index/*.sqlite
 **/index/*.sqlite-*
 
-# Eval results (local only, not part of release)
-eval/results_*.json
-eval/EVAL_LOG.md
+# Eval directory (local only, not part of release)
+eval/
