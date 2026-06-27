@@ -66,12 +66,12 @@ func NextPending(db *sql.DB) (string, error) {
 	return path, tx.Commit()
 }
 
-// MarkDone marks the task as done.
+// MarkDone removes the completed task from the queue.
+// The distill_queue only needs to track in-flight work; completed tasks are
+// redundant because FindNewFiles checks the filesystem (wiki/source-notes/)
+// to determine what still needs distillation.
 func MarkDone(db *sql.DB, path string) error {
-	_, err := db.Exec(
-		`UPDATE distill_queue SET status='done', updated_at=? WHERE path=?`,
-		time.Now().Unix(), path,
-	)
+	_, err := db.Exec(`DELETE FROM distill_queue WHERE path=?`, path)
 	return err
 }
 
@@ -97,7 +97,7 @@ func Stats(db *sql.DB) (map[string]int, error) {
 	}
 	defer rows.Close()
 
-	counts := map[string]int{"pending": 0, "processing": 0, "done": 0, "failed": 0}
+	counts := map[string]int{"pending": 0, "processing": 0, "failed": 0}
 	for rows.Next() {
 		var status string
 		var n int
