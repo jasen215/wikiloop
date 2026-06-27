@@ -52,16 +52,17 @@ func TestRunWorkersProcessesQueue(t *testing.T) {
 
 	// 等队列处理完
 	deadline := time.Now().Add(4 * time.Second)
+	// MarkDone now deletes rows, so wait until queue is empty (both processed).
 	for time.Now().Before(deadline) {
 		stats, _ := Stats(db)
-		if stats["done"] == 2 {
+		if stats["pending"] == 0 && stats["processing"] == 0 {
 			break
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
 
 	stats, _ := Stats(db)
-	if stats["done"] != 2 {
-		t.Errorf("expected 2 done, got %+v", stats)
+	if stats["pending"] != 0 || stats["processing"] != 0 {
+		t.Errorf("expected queue empty after processing, got %+v", stats)
 	}
 }

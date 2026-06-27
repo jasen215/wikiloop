@@ -92,9 +92,11 @@ func TestNextPendingAndMarkDone(t *testing.T) {
 	if err := MarkDone(db, path); err != nil {
 		t.Fatal(err)
 	}
-	db.QueryRow("SELECT status FROM distill_queue WHERE path=?", path).Scan(&status)
-	if status != "done" {
-		t.Errorf("expected done, got %q", status)
+	// MarkDone deletes the row — the queue should be empty now.
+	var count int
+	db.QueryRow("SELECT COUNT(*) FROM distill_queue WHERE path=?", path).Scan(&count)
+	if count != 0 {
+		t.Errorf("expected row deleted after MarkDone, got count=%d", count)
 	}
 }
 
