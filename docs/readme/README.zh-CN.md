@@ -109,10 +109,12 @@ Agent 通过 MCP 使用 `kb_search` + `kb_page`。搜索基于纯 FTS（SQLite F
 
 | 平台 | 文件 |
 |---|---|
-| macOS Apple Silicon | `WikiLoop-<version>-darwin-arm64.dmg` |
+| macOS Apple Silicon（ARM64）| `WikiLoop-<version>-macos-arm64.dmg` |
 | Linux x86_64 | `wikiloop-<version>-linux-amd64.tar.gz` |
 | Linux ARM64 | `wikiloop-<version>-linux-arm64.tar.gz` |
 | Windows x86_64 | `wikiloop-<version>-windows-amd64.zip` |
+
+> **macOS Intel（x86_64）：** 暂无预编译包。GitHub Actions 的 Intel macOS runner 已于 2025 年 4 月停用。Intel Mac 用户请在本机从源码构建：`CGO_ENABLED=1 go build -tags fts5 -o wikiloop ./cmd/wikiloop/`
 
 **macOS：** 打开 DMG，将 WikiLoop 拖入 Applications。App 以 menubar 图标形式运行。
 
@@ -152,7 +154,7 @@ go build -tags fts5 -o wikiloop.exe ./cmd/wikiloop/
 
 | Target | 输出 | 平台 |
 |---|---|---|
-| `darwin-arm64` | `dist/WikiLoop-<version>-darwin-arm64.dmg` | macOS Apple Silicon |
+| `darwin-arm64` | `dist/WikiLoop-<version>-macos-arm64.dmg` | macOS Apple Silicon |
 | `linux-amd64` | `dist/wikiloop-<version>-linux-amd64.tar.gz` | Linux x86_64 |
 | `linux-arm64` | `dist/wikiloop-<version>-linux-arm64.tar.gz` | Linux ARM64 |
 | `windows-amd64` | `dist/wikiloop-<version>-windows-amd64.zip` | Windows x86_64 |

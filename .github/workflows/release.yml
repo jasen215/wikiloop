@@ -36,7 +36,7 @@ jobs:
         with:
           name: dist-macos
           path: |
-            dist/WikiLoop-${{ steps.version.outputs.VERSION }}-darwin-arm64.dmg
+            dist/WikiLoop-${{ steps.version.outputs.VERSION }}-macos-arm64.dmg
             dist/wikiloop-${{ steps.version.outputs.VERSION }}-linux-amd64.tar.gz
             dist/wikiloop-${{ steps.version.outputs.VERSION }}-linux-arm64.tar.gz
 
@@ -97,7 +97,7 @@ jobs:
           draft: false
           prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
           files: |
-            dist/WikiLoop-${{ steps.version.outputs.VERSION }}-darwin-arm64.dmg
+            dist/WikiLoop-${{ steps.version.outputs.VERSION }}-macos-arm64.dmg
             dist/wikiloop-${{ steps.version.outputs.VERSION }}-linux-amd64.tar.gz
             dist/wikiloop-${{ steps.version.outputs.VERSION }}-linux-arm64.tar.gz
             dist/wikiloop-${{ steps.version.outputs.VERSION }}-windows-amd64.zip

@@ -109,10 +109,12 @@ Download the latest release:
 
 | Platform | File |
 |---|---|
-| macOS Apple Silicon | `WikiLoop-<version>-darwin-arm64.dmg` |
+| macOS Apple Silicon (ARM64) | `WikiLoop-<version>-macos-arm64.dmg` |
 | Linux x86_64 | `wikiloop-<version>-linux-amd64.tar.gz` |
 | Linux ARM64 | `wikiloop-<version>-linux-arm64.tar.gz` |
 | Windows x86_64 | `wikiloop-<version>-windows-amd64.zip` |
+
+> **macOS Intel (x86_64):** No pre-built release. GitHub Actions dropped the Intel macOS runner in April 2025. Build from source on your Intel Mac: `CGO_ENABLED=1 go build -tags fts5 -o wikiloop ./cmd/wikiloop/`
 
 **macOS:** Open the DMG and drag WikiLoop to Applications. The app runs as a menubar icon.
 
@@ -152,7 +154,7 @@ Or use the multi-platform build script:
 
 | Target | Output | Platform |
 |---|---|---|
-| `darwin-arm64` | `dist/WikiLoop-<version>-darwin-arm64.dmg` | macOS Apple Silicon |
+| `darwin-arm64` | `dist/WikiLoop-<version>-macos-arm64.dmg` | macOS Apple Silicon |
 | `linux-amd64` | `dist/wikiloop-<version>-linux-amd64.tar.gz` | Linux x86_64 |
 | `linux-arm64` | `dist/wikiloop-<version>-linux-arm64.tar.gz` | Linux ARM64 |
 | `windows-amd64` | `dist/wikiloop-<version>-windows-amd64.zip` | Windows x86_64 |
