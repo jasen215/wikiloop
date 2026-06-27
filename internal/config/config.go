@@ -38,7 +38,7 @@ type Config struct {
 }
 
 type UIConfig struct {
-	Language string `yaml:"language"` // "en" or "zh"
+	Language string `yaml:"language"` // one of: en, zh-CN, zh-TW, ru, de, fr, es, ko
 }
 
 type RuntimeConfig struct {
@@ -71,14 +71,54 @@ type EmbeddingConfig struct {
 
 func detectSystemLanguage() string {
 	for _, env := range []string{"LANG", "LC_ALL", "LANGUAGE"} {
-		if v := os.Getenv(env); strings.HasPrefix(v, "zh") {
-			return "zh"
+		v := os.Getenv(env)
+		if strings.HasPrefix(v, "zh_TW") || strings.HasPrefix(v, "zh_HK") {
+			return "zh-TW"
+		}
+		if strings.HasPrefix(v, "zh") {
+			return "zh-CN"
+		}
+		if strings.HasPrefix(v, "ru") {
+			return "ru"
+		}
+		if strings.HasPrefix(v, "de") {
+			return "de"
+		}
+		if strings.HasPrefix(v, "fr") {
+			return "fr"
+		}
+		if strings.HasPrefix(v, "es") {
+			return "es"
+		}
+		if strings.HasPrefix(v, "ko") {
+			return "ko"
 		}
 	}
 	if runtime.GOOS == "darwin" {
 		out, err := exec.Command("defaults", "read", "NSGlobalDomain", "AppleLocale").Output()
-		if err == nil && strings.HasPrefix(strings.TrimSpace(string(out)), "zh") {
-			return "zh"
+		if err == nil {
+			locale := strings.TrimSpace(string(out))
+			if strings.HasPrefix(locale, "zh_TW") || strings.HasPrefix(locale, "zh_HK") {
+				return "zh-TW"
+			}
+			if strings.HasPrefix(locale, "zh") {
+				return "zh-CN"
+			}
+			if strings.HasPrefix(locale, "ru") {
+				return "ru"
+			}
+			if strings.HasPrefix(locale, "de") {
+				return "de"
+			}
+			if strings.HasPrefix(locale, "fr") {
+				return "fr"
+			}
+			if strings.HasPrefix(locale, "es") {
+				return "es"
+			}
+			if strings.HasPrefix(locale, "ko") {
+				return "ko"
+			}
 		}
 	}
 	return "en"
@@ -143,6 +183,10 @@ func Load(kbRoot string) (*Config, error) {
 	if cfg.UI.Language == "" {
 		cfg.UI.Language = detectSystemLanguage()
 		_ = Save(kbRoot, cfg) // best-effort write; ignore error
+	} else if cfg.UI.Language == "zh" {
+		// Migrate old "zh" to "zh-CN" (one-time, write back to config.yaml)
+		cfg.UI.Language = "zh-CN"
+		_ = Save(kbRoot, cfg)
 	}
 
 	return cfg, nil
@@ -263,7 +307,12 @@ func setRuntimeField(cfg *Config, key, val string) {
 func setUIField(cfg *Config, key, val string) {
 	switch key {
 	case "language":
-		if val == "zh" || val == "en" {
+		valid := map[string]bool{
+			"en": true, "zh-CN": true, "zh-TW": true,
+			"ru": true, "de": true, "fr": true, "es": true, "ko": true,
+			"zh": true, // legacy value accepted for migration in Load()
+		}
+		if valid[val] {
 			cfg.UI.Language = val
 		}
 	}
