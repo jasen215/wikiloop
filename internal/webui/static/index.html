@@ -236,8 +236,6 @@ async function deleteRedLink(concept) {
     loadRedLinks();
 }
 
-loadStatus();
-loadRedLinks();
 </script>
 
 <script>
@@ -280,6 +278,9 @@ async function applyI18n() {
     const key = el.getAttribute("data-i18n-placeholder");
     if (dict[key]) el.placeholder = dict[key];
   });
+
+  loadStatus();
+  loadRedLinks();
 }
 
 document.addEventListener("DOMContentLoaded", applyI18n);
