@@ -51,11 +51,13 @@ wikiloop-kb/
 
 ## 에이전트가 WikiLoop를 사용하는 방법
 
-에이전트는 두 가지 MCP 도구를 통해 WikiLoop와 상호작용합니다:
+에이전트는 세 가지 MCP 도구를 통해 WikiLoop와 상호작용합니다:
 
 **`kb_search(query, limit?)`** — 키워드나 문구로 검색합니다. 호출당 최대 5개의 source-note와 3개의 concept/comparison/decision 페이지를 반환합니다. 각 결과에는 탐색을 위한 관련 문서 목록이 담긴 `related` 필드가 포함됩니다. 여러 다른 키워드로 여러 번 검색하여 주제를 다양한 각도에서 다룹니다.
 
 **`kb_page(ids, full?)`** — ID(kb_search 결과에서)로 하나 이상의 페이지 전체 내용을 가져옵니다. 최대 5개의 ID를 전달하여 여러 문서를 한 번에 스캔하거나, 단일 ID와 `full=true`를 사용하여 완전한 전체 텍스트를 가져옵니다.
+
+**`kb_add(filename, content, source_url?)`** — 지식 베이스에 텍스트 문서를 추가합니다. 콘텐츠를 `raw/<filename>`에 쓰고 증분 인덱싱을 트리거합니다. 증류는 백그라운드에서 비동기적으로 실행됩니다. 에이전트가 PDF/Word/Excel/EPUB에서 추출한 콘텐츠에는 `converted/` 접두사를 사용하세요.
 
 권장 에이전트 워크플로우:
 
@@ -232,7 +234,7 @@ wikiloop lint           # wiki 페이지 상태 점검
 
 WikiLoop는 MCP 프로토콜을 통해 KB 도구를 노출합니다.
 
-**사용 가능한 도구:** `kb_search`, `kb_page`
+**사용 가능한 도구:** `kb_search`, `kb_page`, `kb_add`
 
 관리 작업 (`status`, `reindex`, `lint`)은 Web UI 또는 CLI를 통해 사용 가능합니다 (`wikiloop status`, `wikiloop index`, `wikiloop lint`).
 
