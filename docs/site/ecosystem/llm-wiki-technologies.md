@@ -20,7 +20,15 @@ Raw docs → LLM distills → wiki pages → [query time] → FTS / graph → re
 | Co-STORM | Collaborative variant of STORM — builds dynamic knowledge map during research to guide compilation direction. |
 | Agentic compilation loop | Agent loop: retrieve → draft → evaluate → re-retrieve → regenerate until knowledge is stable. |
 
-## 2. Knowledge Representation
+## 2. Standards & Formats
+
+| Standard | Notes |
+|---|---|
+| [OKF v0.1](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf) (Open Knowledge Format) | Google Cloud's engineering spec for the "LLM Wiki" idea. A KB is a directory of Markdown files with YAML frontmatter. Emphasizes structured, portable, tool-agnostic knowledge units. WikiLoop bundles are OKF-conformant. |
+| YAML frontmatter schema | Knowledge unit identity card: `type` (sop / metric / template / case / decision / risk / glossary), `title`, `description`, `source`, `tags`, `updated_at`, `status` (active / outdated / draft). |
+| Knowledge unit + relations | Each unit is a standalone Markdown file; relations expressed as Markdown links — forms a navigable knowledge map for agents. |
+
+## 3. Knowledge Representation
 
 | Technology | Notes |
 |---|---|
