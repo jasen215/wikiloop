@@ -51,11 +51,13 @@ wikiloop-kb/
 
 ## Agent 如何使用 WikiLoop
 
-Agent 透過兩個 MCP 工具與 WikiLoop 互動：
+Agent 透過三個 MCP 工具與 WikiLoop 互動：
 
 **`kb_search(query, limit?)`** — 用關鍵詞或自然語言搜尋。每次返回最多 5 篇 source-note 和 3 篇 concept/comparison/decision 頁面。每條結果包含 `related` 欄位，列出關聯文件供繼續導覽。用不同關鍵詞多次搜尋，從多個角度涵蓋話題。
 
 **`kb_page(ids, full?)`** — 按 ID（來自 `kb_search` 結果）獲取一篇或多篇頁面的完整內容。一次最多傳 5 個 ID，或對單篇使用 `full=true` 獲取不截斷的全文。
+
+**`kb_add(filename, content, source_url?)`** — 向知識庫新增文字文件。將內容寫入 `raw/<filename>` 並觸發增量索引。提煉在後台非同步執行。Agent 提取的 PDF/Word/Excel/EPUB 內容使用 `converted/` 前綴。
 
 推薦的 Agent 工作流程：
 
@@ -232,7 +234,7 @@ wikiloop lint           # 健康檢查 wiki 頁面
 
 WikiLoop 透過 MCP 協議對外暴露 KB 工具。
 
-**可用 tools：** `kb_search`、`kb_page`
+**可用 tools：** `kb_search`、`kb_page`、`kb_add`
 
 管理操作（狀態、重建索引、健康檢查）透過 Web UI 或 CLI 執行：`wikiloop status`、`wikiloop index`、`wikiloop lint`。
 

@@ -51,11 +51,13 @@ wikiloop-kb/
 
 ## Cómo usan los agentes WikiLoop
 
-Los agentes interactúan con WikiLoop a través de dos herramientas MCP:
+Los agentes interactúan con WikiLoop a través de tres herramientas MCP:
 
 **`kb_search(query, limit?)`** — Buscar con una palabra clave o frase. Devuelve hasta 5 source-notes y 3 páginas concept/comparison/decision por llamada. Cada resultado incluye un campo `related` con documentos relacionados para navegación. Use múltiples búsquedas con diferentes palabras clave para cubrir un tema desde múltiples ángulos.
 
 **`kb_page(ids, full?)`** — Recupera el contenido completo de una o más páginas por ID (de los resultados de `kb_search`). Pase hasta 5 IDs para escanear varios documentos a la vez, o `full=true` con un solo ID para obtener el texto completo sin truncar.
+
+**`kb_add(filename, content, source_url?)`** — Añade un documento de texto a la base de conocimiento. Escribe el contenido en `raw/<filename>` y desencadena la indexación incremental. La destilación se ejecuta de forma asíncrona en segundo plano. Use el prefijo `converted/` para contenido extraído por agentes de PDF/Word/Excel/EPUB.
 
 Flujo de trabajo recomendado del agente:
 
@@ -232,7 +234,7 @@ Todos los comandos aceptan un flag global `--kb <path>` (por defecto `$WIKILOOP_
 
 WikiLoop expone herramientas KB a través del protocolo MCP.
 
-**Herramientas disponibles:** `kb_search`, `kb_page`
+**Herramientas disponibles:** `kb_search`, `kb_page`, `kb_add`
 
 Las operaciones de administración (`status`, `reindex`, `lint`) están disponibles vía la interfaz Web o CLI (`wikiloop status`, `wikiloop index`, `wikiloop lint`).
 
