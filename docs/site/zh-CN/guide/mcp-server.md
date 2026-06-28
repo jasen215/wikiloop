@@ -58,5 +58,6 @@ wikiloop serve
 |---|---|
 | `kb_search` | FTS 关键词搜索，返回带 related 链接的排序结果 |
 | `kb_page` | 通过 ID 获取完整页面内容 |
+| `kb_add` | 向知识库添加文本文档，触发增量索引和异步提炼 |
 
 管理操作（`status`、`reindex`、`lint`）可通过 Web UI 或 CLI 执行。
