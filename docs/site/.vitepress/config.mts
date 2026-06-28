@@ -92,6 +92,7 @@ export default defineConfig({
               items: [
                 { text: 'RAG Systems', link: '/ecosystem/rag-systems' },
                 { text: 'LLM Wiki Systems', link: '/ecosystem/llm-wiki-systems' },
+                { text: 'Key Technologies', link: '/ecosystem/key-technologies' },
               ]
             }
           ],
@@ -163,6 +164,7 @@ export default defineConfig({
               items: [
                 { text: 'RAG 系统', link: '/zh-CN/ecosystem/rag-systems' },
                 { text: 'LLM Wiki 系统', link: '/zh-CN/ecosystem/llm-wiki-systems' },
+                { text: '关键技术', link: '/zh-CN/ecosystem/key-technologies' },
               ]
             }
           ],
