@@ -20,7 +20,15 @@ LLM Wiki（知识编译范式）背后的核心技术——知识在写入时预
 | Co-STORM | STORM 的协作变体，研究过程中构建动态知识图谱指导编译方向。 |
 | Agentic 编译循环 | Agent 循环：检索 → 草稿 → 评估 → 补充检索 → 再生成，直到知识稳定。 |
 
-## 2. 知识表示
+## 2. 标准与格式
+
+| 标准 | 说明 |
+|---|---|
+| [OKF v0.1](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf)（Open Knowledge Format，开放知识格式） | Google Cloud 对 "LLM Wiki" 想法的工程化规格。知识库是一个包含 YAML frontmatter 的 Markdown 文件目录，强调知识的结构化、可携带性和工具无关性。WikiLoop 知识库与 OKF v0.1 兼容。 |
+| YAML frontmatter Schema | 知识单元的"身份证"：`type`（sop / metric / template / case / decision / risk / glossary）、`title`、`description`、`source`、`tags`、`updated_at`、`status`（active / outdated / draft）。 |
+| 知识单元 + 关联 | 每个知识单元是独立的 Markdown 文件；关联关系用 Markdown 链接表达而非文件夹层级——形成供 Agent 导航的知识地图。 |
+
+## 3. 知识表示
 
 | 技术 | 说明 |
 |---|---|
@@ -32,7 +40,7 @@ LLM Wiki（知识编译范式）背后的核心技术——知识在写入时预
 | 本体图谱（Ontology Graph） | 编译过程中构建的类型化实体-关系图谱。Sage Wiki 内置 8 种关系类型（`implements`、`contradicts`、`trades_off` 等）。 |
 | Schema / 模板 | 指导 LLM 编译风格的写作规则和页面模板，每个 KB 可自定义。 |
 
-## 3. 索引与搜索
+## 4. 索引与搜索
 
 | 技术 | 说明 |
 |---|---|
@@ -42,7 +50,7 @@ LLM Wiki（知识编译范式）背后的核心技术——知识在写入时预
 | 混合检索（FTS + 向量 + 图） | Sage Wiki：FTS5（411µs）+ 向量（81ms）+ 本体图谱（1µs），通过 RRF 融合。 |
 | 章节树索引 | 保留文档 H1/H2/H3 层级——平铺切块的结构保留替代方案。 |
 
-## 4. 知识质量与维护
+## 5. 知识质量与维护
 
 | 技术 | 说明 |
 |---|---|
@@ -53,7 +61,7 @@ LLM Wiki（知识编译范式）背后的核心技术——知识在写入时预
 | 知识空白分析 | `wikiloop synthesize --gaps` 识别覆盖不足的主题。 |
 | 实体去重 / 解析 | 识别同一概念的不同表述并合并为单一节点。 |
 
-## 5. Agent 接口（MCP）
+## 6. Agent 接口（MCP）
 
 | 技术 | 说明 |
 |---|---|
@@ -64,7 +72,7 @@ LLM Wiki（知识编译范式）背后的核心技术——知识在写入时预
 | 迭代搜索模式 | Agent 从不同角度发出多次查询，跟随 `related` 链接，自行综合答案。 |
 | Sage Wiki MCP 工具 | 17 个工具：6 读、9 写、2 复合——Agent 可直接写入和编译知识。 |
 
-## 6. 文件转换（输入层）
+## 7. 文件转换（输入层）
 
 | 技术 | 说明 |
 |---|---|

@@ -20,7 +20,15 @@ Raw docs → LLM distills → wiki pages → [query time] → FTS / graph → re
 | Co-STORM | Collaborative variant of STORM — builds dynamic knowledge map during research to guide compilation direction. |
 | Agentic compilation loop | Agent loop: retrieve → draft → evaluate → re-retrieve → regenerate until knowledge is stable. |
 
-## 2. Knowledge Representation
+## 2. Standards & Formats
+
+| Standard | Notes |
+|---|---|
+| [OKF v0.1](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf) (Open Knowledge Format) | Google Cloud's engineering spec for the "LLM Wiki" idea. A KB is a directory of Markdown files with YAML frontmatter (`type`, `title`, `description`, `source`, `tags`, `status`). Emphasizes structured, portable, tool-agnostic knowledge units. WikiLoop bundles are OKF-conformant. |
+| YAML frontmatter schema | Knowledge unit identity card: `type` (sop / metric / template / case / decision / risk / glossary), `title`, `description`, `source`, `tags`, `updated_at`, `status` (active / outdated / draft). |
+| Knowledge unit + relations | Each unit is a standalone Markdown file; relations expressed as Markdown links rather than folder hierarchy — forms a navigable knowledge map for agents. |
+
+## 3. Knowledge Representation
 
 | Technology | Notes |
 |---|---|
@@ -32,7 +40,7 @@ Raw docs → LLM distills → wiki pages → [query time] → FTS / graph → re
 | Ontology graph | Typed entity-relation graph built during compilation. Sage Wiki: 8 built-in relation types (`implements`, `contradicts`, `trades_off`, …). |
 | Schema / Templates | Authoring rules and page templates that guide LLM compilation style, customizable per KB. |
 
-## 3. Indexing & Search
+## 4. Indexing & Search
 
 | Technology | Notes |
 |---|---|
@@ -42,7 +50,7 @@ Raw docs → LLM distills → wiki pages → [query time] → FTS / graph → re
 | Hybrid (FTS + vector + graph) | Sage Wiki: FTS5 (411µs) + vector (81ms) + ontology graph (1µs) merged via RRF. |
 | Chapter-tree indexing | Preserves document H1/H2/H3 hierarchy — structure-preserving alternative to flat chunking. |
 
-## 4. Knowledge Quality & Maintenance
+## 5. Knowledge Quality & Maintenance
 
 | Technology | Notes |
 |---|---|
@@ -53,7 +61,7 @@ Raw docs → LLM distills → wiki pages → [query time] → FTS / graph → re
 | Knowledge gap analysis | `wikiloop synthesize --gaps` identifies topics with insufficient coverage. |
 | Entity deduplication | Identify different expressions of the same concept and merge into a single node. |
 
-## 5. Agent Interface (MCP)
+## 6. Agent Interface (MCP)
 
 | Technology | Notes |
 |---|---|
@@ -64,7 +72,7 @@ Raw docs → LLM distills → wiki pages → [query time] → FTS / graph → re
 | Iterative search pattern | Agent issues multiple queries from different angles, follows `related` links, synthesizes own answer. |
 | Sage Wiki MCP tools | 17 tools: 6 read, 9 write, 2 composite — agents can directly write and compile knowledge. |
 
-## 6. File Conversion (Input Layer)
+## 7. File Conversion (Input Layer)
 
 | Technology | Notes |
 |---|---|
