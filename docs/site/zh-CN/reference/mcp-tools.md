@@ -1,6 +1,6 @@
 # MCP 工具参考
 
-WikiLoop 为 Agent 暴露两个 MCP 工具。
+WikiLoop 为 Agent 暴露三个 MCP 工具。
 
 ## kb_search
 
@@ -20,6 +20,21 @@ WikiLoop 为 Agent 暴露两个 MCP 工具。
 - `title`、`snippet` — 匹配内容预览
 - `kind`、`layer` — 页面分类
 - `related` — 关联文档，用于图谱导航
+
+## kb_add
+
+向知识库添加文本文档。
+
+**参数：**
+
+| 参数 | 类型 | 必填 | 描述 |
+|---|---|---|---|
+| `filename` | string | 是 | 相对于 `raw/` 的路径，支持任意子目录结构（如 `references/article.md`、`converted/report.md`）。Agent 提取的 PDF/Word/Excel/EPUB 内容使用 `converted/` 前缀。 |
+| `content` | string | 是 | 文件内容（Markdown 或纯文本） |
+| `source_url` | string | 否 | 原始来源 URL，写入文件顶部注释 |
+| `overwrite` | boolean | 否 | 文件已存在时是否覆盖（默认 false） |
+
+将内容写入 `raw/<filename>` 并触发增量索引。提炼在后台异步运行。
 
 ## kb_page
 

@@ -58,5 +58,6 @@ The KB directory is created automatically on first launch. No manual `init` need
 |---|---|
 | `kb_search` | FTS keyword search, returns ranked results with related links |
 | `kb_page` | Fetch full page content by ID |
+| `kb_add` | Add a text document to the KB; triggers incremental indexing and async distillation |
 
 Admin operations (`status`, `reindex`, `lint`) are available via the Web UI or CLI.

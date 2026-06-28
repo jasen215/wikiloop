@@ -51,11 +51,13 @@ wikiloop-kb/
 
 ## How Agents Use WikiLoop
 
-Agents interact with WikiLoop through two MCP tools:
+Agents interact with WikiLoop through three MCP tools:
 
 **`kb_search(query, limit?)`** — Search with a keyword or phrase. Returns up to 5 source-notes and 3 concept/comparison/decision pages per call. Each result includes a `related` field listing linked documents for navigation. Use multiple searches with different keywords to cover a topic from multiple angles.
 
 **`kb_page(ids, full?)`** — Fetch full content of one or more pages by ID (from `kb_search` results). Pass up to 5 IDs to scan several documents at once, or `full=true` with a single ID to get the complete untruncated text.
+
+**`kb_add(filename, content, source_url?)`** — Add a text document to the knowledge base. Writes content to `raw/<filename>` and triggers incremental indexing. Distillation runs asynchronously in the background. Use the `converted/` prefix for agent-extracted PDF/Word/Excel/EPUB content.
 
 The recommended agent workflow:
 
@@ -232,7 +234,7 @@ All commands accept a global `--kb <path>` flag (defaults to `$WIKILOOP_KB`, the
 
 WikiLoop exposes KB tools via the MCP protocol.
 
-**Available tools:** `kb_search`, `kb_page`
+**Available tools:** `kb_search`, `kb_page`, `kb_add`
 
 Admin operations (`status`, `reindex`, `lint`) are available via the Web UI or CLI (`wikiloop status`, `wikiloop index`, `wikiloop lint`).
 

@@ -1,6 +1,6 @@
 # MCP Tools Reference
 
-WikiLoop exposes two MCP tools for agents.
+WikiLoop exposes three MCP tools for agents.
 
 ## kb_search
 
@@ -27,6 +27,31 @@ Search the knowledge base with a keyword or phrase.
 {
   "query": "RAG retrieval augmented generation",
   "limit": 5
+}
+```
+
+## kb_add
+
+Add a text document to the knowledge base.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `filename` | string | yes | Path relative to `raw/`. Use any subdirectory structure (e.g. `references/article.md`, `converted/report.md`). Use `converted/` prefix for agent-extracted PDF/Word/Excel/EPUB content. |
+| `content` | string | yes | File content (Markdown or plain text) |
+| `source_url` | string | no | Original source URL, written as a comment at the top of the file |
+| `overwrite` | boolean | no | Overwrite if file already exists (default false) |
+
+Writes content to `raw/<filename>` and triggers incremental indexing. Distillation runs asynchronously in the background.
+
+**Example:**
+
+```json
+{
+  "filename": "references/my-article.md",
+  "content": "# My Article\n\nContent here...",
+  "source_url": "https://example.com/article"
 }
 ```
 
