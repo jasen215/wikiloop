@@ -1,3 +1,5 @@
+> **This repository has moved to [pieteams/piekbs](https://github.com/pieteams/piekbs)**
+
 <div align="center">
   <img src="docs/readme/logo.png" width="128" alt="WikiLoop"><br>
   <h1>WikiLoop</h1>
